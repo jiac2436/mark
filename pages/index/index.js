@@ -10,7 +10,7 @@ const FALLBACK_CENTER = {
 }
 
 const DEFAULT_SCALE = 17
-const NATIVE_CLUSTER_GRID_SIZE = 48
+const NATIVE_CLUSTER_GRID_SIZE = 15
 const MARKER_TAP_FALLBACK_RADIUS_PX = 72
 const MAP_TAP_FALLBACK_DELAY_MS = 120
 const MAP_TAP_SUPPRESS_MS = 240
@@ -252,6 +252,7 @@ Page({
     browseTitle: '点击地图标记查看列表',
     browseSubtitle: '',
     panelMode: 'browse',
+    mapLocateButtonClass: 'map-locate-button',
     clusterPanelExpanded: true,
     clusterPanelStateClass: 'is-expanded',
     clusterPanelBarTitle: '标记列表',
@@ -333,12 +334,11 @@ Page({
         this.setData({
           latitude,
           longitude,
-          scale: DEFAULT_SCALE,
           hasLocationAuth: true,
           locationLabel: '已定位到当前位置',
           showPermissionStrip: false
         }, () => {
-          this.includePoint({ latitude, longitude })
+          this.moveToCurrentLocation()
         })
 
         if (showFeedback) {
@@ -374,6 +374,14 @@ Page({
     this.requestCurrentLocation(true)
   },
 
+  moveToCurrentLocation() {
+    if (!this.mapCtx || !this.mapCtx.moveToLocation) {
+      return
+    }
+
+    this.mapCtx.moveToLocation()
+  },
+
   onOpenSettingTap() {
     wx.openSetting({
       success: () => {
@@ -398,6 +406,7 @@ Page({
           searchPoint,
           locationLabel: `搜索：${searchPoint.name}`,
           panelMode: 'browse',
+          mapLocateButtonClass: this.getMapLocateButtonClass('browse'),
           clusterPanelExpanded: true,
           clusterPanelStateClass: 'is-expanded',
           showCategoryBar: true,
@@ -429,6 +438,7 @@ Page({
       activeCategoryLabel: categoryLabel,
       filterCategories: buildFilterCategories(category),
       panelMode: 'browse',
+      mapLocateButtonClass: this.getMapLocateButtonClass('browse'),
       clusterPanelExpanded: true,
       clusterPanelStateClass: 'is-expanded',
       showCategoryBar: true,
@@ -487,6 +497,7 @@ Page({
 
     this.setData({
       panelMode: 'form',
+      mapLocateButtonClass: this.getMapLocateButtonClass('form'),
       clusterPanelExpanded: true,
       clusterPanelStateClass: 'is-expanded',
       showCategoryBar: false,
@@ -510,6 +521,7 @@ Page({
   onCancelCreateTap() {
     this.setData({
       panelMode: 'browse',
+      mapLocateButtonClass: this.getMapLocateButtonClass('browse'),
       clusterPanelExpanded: true,
       clusterPanelStateClass: 'is-expanded',
       showCategoryBar: true,
@@ -709,6 +721,8 @@ Page({
     const selectedClusterMarkers = this.withSelectedListItemClass(this.data.selectedClusterMarkers, markerId)
 
     this.setData({
+      latitude: marker.latitude,
+      longitude: marker.longitude,
       selectedMarkerId: markerId,
       selectedMarker: selectedClusterMarkers.find(item => item.id === markerId),
       selectedClusterMarkers
@@ -863,6 +877,7 @@ Page({
       const decoratedMarkers = this.withSelectedListItemClass(selectedGroupMarkers, selectedMarkerId)
 
       updateData.panelMode = opts.panelMode || 'cluster'
+      updateData.mapLocateButtonClass = this.getMapLocateButtonClass(updateData.panelMode, this.data.clusterPanelExpanded)
       updateData.clusterPanelBarTitle = '标记列表'
       updateData.clusterPanelBarSubtitle = `${selectedGroupMarkers.length} 条标记，点击列表查看详情`
       updateData.selectedClusterKey = this.getMarkerGroupKey(selectedGroupMarkers)
@@ -874,6 +889,7 @@ Page({
       const decoratedMarkers = this.withSelectedListItemClass([selectedMarker], selectedMarkerId)
 
       updateData.panelMode = opts.panelMode || 'cluster'
+      updateData.mapLocateButtonClass = this.getMapLocateButtonClass(updateData.panelMode, this.data.clusterPanelExpanded)
       updateData.clusterPanelBarTitle = '标记列表'
       updateData.clusterPanelBarSubtitle = '1 条标记，点击列表查看详情'
       updateData.selectedClusterKey = this.getMarkerGroupKey([selectedMarker])
@@ -882,6 +898,7 @@ Page({
       updateData.selectedMarker = decoratedMarkers[0]
     } else if (opts.clearSelection || this.data.panelMode === 'cluster' || opts.panelMode === 'cluster') {
       updateData.panelMode = opts.panelMode === 'cluster' ? 'browse' : (opts.panelMode || 'browse')
+      updateData.mapLocateButtonClass = this.getMapLocateButtonClass(updateData.panelMode)
       updateData.clusterPanelExpanded = true
       updateData.clusterPanelStateClass = 'is-expanded'
       updateData.selectedClusterKey = ''
@@ -1140,7 +1157,8 @@ Page({
   setClusterPanelExpanded(expanded, options) {
     const updateData = {
       clusterPanelExpanded: expanded,
-      clusterPanelStateClass: expanded ? 'is-expanded' : 'is-collapsed'
+      clusterPanelStateClass: expanded ? 'is-expanded' : 'is-collapsed',
+      mapLocateButtonClass: this.getMapLocateButtonClass(this.data.panelMode, expanded)
     }
 
     if (expanded && options && options.clearDetail) {
@@ -1169,6 +1187,7 @@ Page({
 
     this.setData({
       panelMode: 'cluster',
+      mapLocateButtonClass: this.getMapLocateButtonClass('cluster', true),
       clusterPanelExpanded: true,
       clusterPanelStateClass: 'is-expanded',
       clusterPanelBarTitle: '标记列表',
@@ -1185,6 +1204,20 @@ Page({
       .map(marker => marker.id)
       .sort()
       .join('|')
+  },
+
+  getMapLocateButtonClass(panelMode, clusterPanelExpanded) {
+    if (panelMode === 'form') {
+      return 'map-locate-button is-above-form-panel'
+    }
+
+    if (panelMode === 'cluster') {
+      return clusterPanelExpanded === false ?
+        'map-locate-button is-above-collapsed-panel' :
+        'map-locate-button is-above-cluster-panel'
+    }
+
+    return 'map-locate-button'
   },
 
   getDisplayMarkers() {
