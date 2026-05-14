@@ -38,6 +38,8 @@
       show-location="{{hasLocationAuth}}"
       bindmarkertap="onMarkerTap"
       bindlabeltap="onMarkerTap"
+      bindcallouttap="onMarkerTap"
+      bindregionchange="onMapRegionChange"
       bindtap="onMapTap"
     />
   </view>
@@ -75,57 +77,62 @@
     </block>
 
     <block wx:elif="{{panelMode === 'cluster'}}">
-      <view class="panel-head">
-        <view>
-          <text wx:if="{{selectedClusterMarkers.length === 1}}" class="panel-title">标记详情</text>
-          <text wx:else class="panel-title">区域标记</text>
-          <text wx:if="{{selectedClusterMarkers.length === 1 && selectedMarker}}" class="panel-subtitle">{{selectedMarker.categoryLabel}} · 分 {{selectedMarker.displayScore}} · {{selectedMarker.timeText}}</text>
-          <text wx:else class="panel-subtitle">{{selectedClusterMarkers.length}} 条标记，点击列表查看详情</text>
+      <view
+        class="cluster-panel-bar"
+        bindtouchstart="onClusterPanelBarTouchStart"
+        bindtouchend="onClusterPanelBarTouchEnd"
+      >
+        <view class="cluster-panel-handle"></view>
+        <view class="cluster-panel-bar-text">
+          <text class="cluster-panel-bar-title">{{clusterPanelBarTitle}}</text>
+          <text class="cluster-panel-bar-subtitle">{{clusterPanelBarSubtitle}}</text>
         </view>
         <text class="cluster-count">{{activeCategoryLabel}}</text>
       </view>
 
-      <scroll-view wx:if="{{selectedClusterMarkers.length > 1}}" class="marker-list-scroll" scroll-y show-scrollbar="{{false}}">
-        <view class="marker-list">
-          <view
-            wx:for="{{selectedClusterMarkers}}"
-            wx:key="id"
-            class="{{item.listItemClass}}"
-            data-id="{{item.id}}"
-            bindtap="onMarkerListItemTap"
-          >
-            <view class="list-item-main">
-              <view class="card-row">
-                <text class="{{item.categoryClass}}">{{item.categoryLabel}}</text>
-                <text wx:if="{{item.isMine}}" class="mine-badge">我</text>
+      <view class="cluster-panel-body {{clusterPanelStateClass}}">
+        <scroll-view wx:if="{{selectedClusterMarkers.length}}" class="marker-list-scroll" scroll-y show-scrollbar="{{false}}">
+          <view class="marker-list">
+            <view
+              wx:for="{{selectedClusterMarkers}}"
+              wx:key="id"
+              class="{{item.listItemClass}}"
+              data-id="{{item.id}}"
+              bindtap="onMarkerListItemTap"
+            >
+              <view class="list-item-main">
+                <view class="card-row">
+                  <text class="{{item.categoryClass}}">{{item.categoryLabel}}</text>
+                  <text wx:if="{{item.isMine}}" class="mine-badge">我</text>
+                </view>
+                <text class="card-title">{{item.displayTitle}}</text>
+                <text class="card-desc">{{item.displayDescription}}</text>
+                <view class="card-meta">
+                  <text>分 {{item.displayScore}}</text>
+                  <text>{{item.timeText}}</text>
+                </view>
               </view>
-              <text class="card-title">{{item.displayTitle}}</text>
-              <text class="card-desc">{{item.displayDescription}}</text>
-              <view class="card-meta">
-                <text>分 {{item.displayScore}}</text>
-                <text>{{item.timeText}}</text>
-              </view>
+              <text class="list-item-arrow">›</text>
             </view>
-            <text class="list-item-arrow">›</text>
           </view>
-        </view>
-      </scroll-view>
+        </scroll-view>
 
-      <view wx:if="{{selectedMarker}}" class="detail">
-        <view class="detail-main">
-          <text class="detail-title">{{selectedMarker.displayTitle}}</text>
-          <text class="detail-desc">{{selectedMarker.displayDescription}}</text>
-          <view class="detail-meta">
-            <text>{{selectedMarker.categoryLabel}}</text>
-            <text>分 {{selectedMarker.displayScore}}</text>
-            <text>{{selectedMarker.timeText}}</text>
+        <view wx:if="{{selectedMarker}}" class="detail">
+          <view class="detail-main">
+            <text class="detail-title">{{selectedMarker.displayTitle}}</text>
+            <text class="detail-desc">{{selectedMarker.displayDescription}}</text>
+            <view class="detail-meta">
+              <text>{{selectedMarker.categoryLabel}}</text>
+              <text>分 {{selectedMarker.displayScore}}</text>
+              <text>{{selectedMarker.timeText}}</text>
+            </view>
           </view>
-        </view>
-        <view class="detail-actions">
-          <button class="{{selectedMarker.likeButtonClass}}" data-vote="1" catchtap="onVoteTap">赞</button>
-          <button class="{{selectedMarker.dislikeButtonClass}}" data-vote="-1" catchtap="onVoteTap">踩</button>
-          <button wx:if="{{selectedMarker.isMine}}" class="danger-button" catchtap="onDeleteMarkerTap">删除</button>
-          <button wx:else class="secondary-button compact" catchtap="onReportTap">举报</button>
+          <view class="detail-actions">
+            <button class="{{selectedMarker.likeButtonClass}}" data-vote="1" catchtap="onVoteTap">赞</button>
+            <button class="{{selectedMarker.dislikeButtonClass}}" data-vote="-1" catchtap="onVoteTap">踩</button>
+            <button wx:if="{{selectedMarker.isMine}}" class="danger-button" catchtap="onDeleteMarkerTap">删除</button>
+            <button wx:else class="secondary-button compact" catchtap="onReportTap">举报</button>
+          </view>
         </view>
       </view>
     </block>

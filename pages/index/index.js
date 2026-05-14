@@ -10,13 +10,15 @@ const FALLBACK_CENTER = {
 }
 
 const DEFAULT_SCALE = 17
-const GRID_SIZE_METERS = 20
-const METERS_PER_LATITUDE = 111320
+const NATIVE_CLUSTER_GRID_SIZE = 48
+const MARKER_TAP_FALLBACK_RADIUS_PX = 72
+const MAP_TAP_FALLBACK_DELAY_MS = 120
+const MAP_TAP_SUPPRESS_MS = 240
+const CLUSTER_PANEL_SWIPE_THRESHOLD_PX = 24
 const NEW_MARKER_HIGHLIGHT_MS = 4000
-const MARKER_TAP_FALLBACK_RADIUS_METERS = 45
 const PENDING_MARKER_ID = 900001
 const HIGHLIGHT_MARKER_ID = 900002
-const MARKER_ICON = '/assets/marker-transparent.png'
+const MARKER_DOT_ICON = '/assets/marker-dot.png'
 
 const MARK_CATEGORIES = [
   { value: 'discovery', label: '发现', defaultTitle: '一个发现标记' },
@@ -163,11 +165,24 @@ function getDistanceMeters(start, end) {
   return radius * 2 * Math.atan2(Math.sqrt(halfChord), Math.sqrt(1 - halfChord))
 }
 
-function getGridKey(marker) {
-  const latCell = Math.floor(marker.latitude * METERS_PER_LATITUDE / GRID_SIZE_METERS)
-  const lngMeters = METERS_PER_LATITUDE * Math.cos(marker.latitude * Math.PI / 180)
-  const lngCell = Math.floor(marker.longitude * lngMeters / GRID_SIZE_METERS)
-  return `${latCell}:${lngCell}`
+function projectToMapPixel(point, scale) {
+  const sinLatitude = Math.sin(point.latitude * Math.PI / 180)
+  const boundedSinLatitude = Math.min(Math.max(sinLatitude, -0.9999), 0.9999)
+  const worldSize = 256 * Math.pow(2, scale)
+
+  return {
+    x: (point.longitude + 180) / 360 * worldSize,
+    y: (0.5 - Math.log((1 + boundedSinLatitude) / (1 - boundedSinLatitude)) / (4 * Math.PI)) * worldSize
+  }
+}
+
+function getPixelDistance(start, end, scale) {
+  const startPixel = projectToMapPixel(start, scale)
+  const endPixel = projectToMapPixel(end, scale)
+  const deltaX = startPixel.x - endPixel.x
+  const deltaY = startPixel.y - endPixel.y
+
+  return Math.sqrt(deltaX * deltaX + deltaY * deltaY)
 }
 
 function getClusterColor(count) {
@@ -184,48 +199,6 @@ function getClusterColor(count) {
     return '#ef4444'
   }
   return '#f87171'
-}
-
-function getClusterSize(count) {
-  if (count >= 7) {
-    return 44
-  }
-  if (count >= 3) {
-    return 38
-  }
-  return 32
-}
-
-function buildClusters(markers) {
-  const clusterMap = {}
-
-  markers.forEach(marker => {
-    const key = getGridKey(marker)
-    if (!clusterMap[key]) {
-      clusterMap[key] = {
-        key,
-        latitudeTotal: 0,
-        longitudeTotal: 0,
-        markers: []
-      }
-    }
-
-    clusterMap[key].latitudeTotal += marker.latitude
-    clusterMap[key].longitudeTotal += marker.longitude
-    clusterMap[key].markers.push(marker)
-  })
-
-  return Object.keys(clusterMap).map(key => {
-    const cluster = clusterMap[key]
-    const count = cluster.markers.length
-    return {
-      key,
-      count,
-      latitude: cluster.latitudeTotal / count,
-      longitude: cluster.longitudeTotal / count,
-      markers: cluster.markers
-    }
-  })
 }
 
 function normalizeOwnMarker(marker) {
@@ -276,9 +249,13 @@ Page({
     votes: {},
     visibleMarkerCount: 0,
     clusterCount: 0,
-    browseTitle: '点击地图标记查看详情',
+    browseTitle: '点击地图标记查看列表',
     browseSubtitle: '',
     panelMode: 'browse',
+    clusterPanelExpanded: true,
+    clusterPanelStateClass: 'is-expanded',
+    clusterPanelBarTitle: '标记列表',
+    clusterPanelBarSubtitle: '',
     showCategoryBar: true,
     showPermissionStrip: false,
     selectedClusterKey: '',
@@ -296,9 +273,15 @@ Page({
   },
 
   onLoad() {
-    this.markerIdToClusterKey = {}
-    this.clusterByKey = {}
+    this.mapMarkerIdToBusinessId = {}
+    this.businessMarkerById = {}
+    this.businessIdToMapMarkerId = {}
+    this.nextMapMarkerId = 1
+    this.currentMapScale = DEFAULT_SCALE
     this.highlightTimer = null
+    this.pendingMapTapTimer = null
+    this.lastMarkerInteractionAt = 0
+    this.clusterPanelTouchStart = null
     this.ensureLocalUser()
     this.loadLocalData()
     this.refreshMapState()
@@ -307,10 +290,13 @@ Page({
 
   onReady() {
     this.mapCtx = wx.createMapContext('markMap', this)
+    this.initNativeMarkerCluster()
+    this.refreshMapState()
   },
 
   onUnload() {
     this.clearHighlightTimer()
+    this.clearMapTapTimer()
   },
 
   ensureLocalUser() {
@@ -412,6 +398,8 @@ Page({
           searchPoint,
           locationLabel: `搜索：${searchPoint.name}`,
           panelMode: 'browse',
+          clusterPanelExpanded: true,
+          clusterPanelStateClass: 'is-expanded',
           showCategoryBar: true,
           showPermissionStrip: !this.data.hasLocationAuth,
           selectedClusterKey: '',
@@ -441,6 +429,8 @@ Page({
       activeCategoryLabel: categoryLabel,
       filterCategories: buildFilterCategories(category),
       panelMode: 'browse',
+      clusterPanelExpanded: true,
+      clusterPanelStateClass: 'is-expanded',
       showCategoryBar: true,
       showPermissionStrip: !this.data.hasLocationAuth,
       selectedClusterKey: '',
@@ -497,6 +487,8 @@ Page({
 
     this.setData({
       panelMode: 'form',
+      clusterPanelExpanded: true,
+      clusterPanelStateClass: 'is-expanded',
       showCategoryBar: false,
       showPermissionStrip: false,
       pendingPoint,
@@ -518,6 +510,8 @@ Page({
   onCancelCreateTap() {
     this.setData({
       panelMode: 'browse',
+      clusterPanelExpanded: true,
+      clusterPanelStateClass: 'is-expanded',
       showCategoryBar: true,
       showPermissionStrip: !this.data.hasLocationAuth,
       pendingPoint: null,
@@ -594,12 +588,14 @@ Page({
         title: '',
         description: ''
       },
+      clusterPanelExpanded: true,
+      clusterPanelStateClass: 'is-expanded',
       highlightMarkerId: marker.id
     }, () => {
       this.refreshMapState({
-        selectedMarkerId: marker.id,
-        panelMode: 'cluster'
+        clearSelection: true
       })
+      this.showMarkerGroupByBusinessIds([marker.id])
       this.startHighlightTimer()
       wx.showToast({
         title: '已创建标记',
@@ -610,39 +606,97 @@ Page({
 
   onMarkerTap(e) {
     const markerId = this.getMarkerEventId(e)
+    const businessMarker = this.getBusinessMarkerByMapId(markerId)
+    this.lastMarkerInteractionAt = Date.now()
+    this.clearMapTapTimer()
+
+    this.debugMapLog('marker tap', {
+      eventType: e.type,
+      markerId,
+      detail: e.detail,
+      hasBusinessMarker: !!businessMarker,
+      businessMarkerId: businessMarker ? businessMarker.id : ''
+    })
 
     if (markerId === PENDING_MARKER_ID) {
       return
     }
 
     if (markerId === HIGHLIGHT_MARKER_ID && this.data.highlightMarkerId) {
-      this.refreshMapState({
-        selectedMarkerId: this.data.highlightMarkerId,
-        panelMode: 'cluster'
-      })
+      this.showMarkerGroupByBusinessIds([this.data.highlightMarkerId])
       return
     }
 
-    const clusterKey = this.markerIdToClusterKey[markerId]
-    if (clusterKey) {
-      this.selectCluster(clusterKey)
+    if (businessMarker) {
+      this.showMarkerGroup([businessMarker])
     }
   },
 
   onMapTap(e) {
-    if (this.data.panelMode === 'form') {
-      return
-    }
+    this.debugMapLog('map tap', {
+      detail: e.detail
+    })
 
     const point = e.detail
     if (!hasValidCoordinate(point)) {
       return
     }
 
-    const clusterKey = this.findNearestClusterKey(point)
-    if (clusterKey) {
-      this.selectCluster(clusterKey)
+    this.clearMapTapTimer()
+    this.pendingMapTapTimer = setTimeout(() => {
+      this.pendingMapTapTimer = null
+
+      if (Date.now() - this.lastMarkerInteractionAt < MAP_TAP_SUPPRESS_MS) {
+        return
+      }
+
+      this.showMarkersNearMapTap(point)
+    }, MAP_TAP_FALLBACK_DELAY_MS)
+  },
+
+  onMapRegionChange(e) {
+    const scale = Number(e.detail && e.detail.scale)
+    if (e.type === 'end' && scale > 0) {
+      this.currentMapScale = scale
     }
+  },
+
+  onClusterPanelBarTouchStart(e) {
+    const touch = e.touches && e.touches[0]
+    if (!touch) {
+      return
+    }
+
+    this.clusterPanelTouchStart = {
+      x: touch.clientX,
+      y: touch.clientY
+    }
+  },
+
+  onClusterPanelBarTouchEnd(e) {
+    const start = this.clusterPanelTouchStart
+    const touch = e.changedTouches && e.changedTouches[0]
+    this.clusterPanelTouchStart = null
+
+    if (!start || !touch) {
+      return
+    }
+
+    const deltaX = touch.clientX - start.x
+    const deltaY = touch.clientY - start.y
+
+    if (Math.abs(deltaY) < CLUSTER_PANEL_SWIPE_THRESHOLD_PX || Math.abs(deltaY) <= Math.abs(deltaX)) {
+      return
+    }
+
+    if (deltaY > 0) {
+      this.setClusterPanelExpanded(false)
+      return
+    }
+
+    this.setClusterPanelExpanded(true, {
+      clearDetail: true
+    })
   },
 
   onMarkerListItemTap(e) {
@@ -689,7 +743,6 @@ Page({
       votes
     }, () => {
       this.refreshMapState({
-        selectedClusterKey: this.data.selectedClusterKey,
         selectedMarkerId: selectedMarker.id,
         panelMode: 'cluster'
       })
@@ -725,8 +778,7 @@ Page({
           highlightMarkerId: this.data.highlightMarkerId === selectedMarker.id ? '' : this.data.highlightMarkerId
         }, () => {
           this.refreshMapState({
-            selectedClusterKey: this.data.selectedClusterKey,
-            panelMode: 'cluster'
+            clearSelection: true
           })
         })
       }
@@ -740,42 +792,46 @@ Page({
     })
   },
 
+  initNativeMarkerCluster() {
+    if (!this.mapCtx || !this.mapCtx.initMarkerCluster) {
+      this.debugMapLog('initMarkerCluster unsupported')
+      return
+    }
+
+    this.debugMapLog('initMarkerCluster start', {
+      gridSize: NATIVE_CLUSTER_GRID_SIZE
+    })
+
+    if (this.mapCtx.on) {
+      this.mapCtx.on('markerClusterClick', res => {
+        this.onNativeMarkerClusterClick(res)
+      })
+    }
+
+    this.mapCtx.initMarkerCluster({
+      gridSize: NATIVE_CLUSTER_GRID_SIZE,
+      zoomOnClick: false,
+      success: res => {
+        this.debugMapLog('initMarkerCluster success', res)
+      },
+      fail: err => {
+        this.debugMapLog('initMarkerCluster fail', err)
+      }
+    })
+  },
+
+  onNativeMarkerClusterClick(res) {
+    const cluster = res.cluster || res
+    this.lastMarkerInteractionAt = Date.now()
+    this.clearMapTapTimer()
+    this.debugMapLog('markerClusterClick', res)
+    this.showMarkerGroupByMapIds(this.getMarkerIdsFromCluster(cluster))
+  },
+
   refreshMapState(options) {
     const opts = options || {}
     const displayMarkers = this.getDisplayMarkers()
-    const clusters = buildClusters(displayMarkers)
-    const markerIdToClusterKey = {}
-    const clusterByKey = {}
-
-    const mapMarkers = clusters.map((cluster, index) => {
-      const markerId = index + 1
-      const color = getClusterColor(cluster.count)
-      const size = getClusterSize(cluster.count)
-
-      markerIdToClusterKey[markerId] = cluster.key
-      clusterByKey[cluster.key] = cluster
-
-      return {
-        id: markerId,
-        latitude: cluster.latitude,
-        longitude: cluster.longitude,
-        iconPath: MARKER_ICON,
-        width: size,
-        height: size,
-        zIndex: 20 + cluster.count,
-        label: {
-          content: `${cluster.count}`,
-          color: '#ffffff',
-          fontSize: 13,
-          bgColor: color,
-          borderRadius: size / 2,
-          padding: 8,
-          textAlign: 'center',
-          anchorX: -size / 2,
-          anchorY: -size / 2
-        }
-      }
-    })
+    const mapMarkers = this.buildNativeMapMarkers(displayMarkers)
 
     if (this.data.pendingPoint) {
       mapMarkers.push(this.createSpecialMarker(PENDING_MARKER_ID, this.data.pendingPoint, '+', '#2563eb', 90))
@@ -788,44 +844,46 @@ Page({
       }
     }
 
-    this.markerIdToClusterKey = markerIdToClusterKey
-    this.clusterByKey = clusterByKey
+    this.updateNativeMapMarkers(mapMarkers)
 
-    let selectedClusterKey = opts.clearSelection ? '' : (opts.selectedClusterKey || this.data.selectedClusterKey)
     let selectedMarkerId = opts.clearSelection ? '' : (opts.selectedMarkerId || this.data.selectedMarkerId)
-
-    if (opts.selectedMarkerId) {
-      selectedClusterKey = this.findClusterKeyByMarkerId(opts.selectedMarkerId, clusters)
-    }
-
-    const selectedCluster = selectedClusterKey ? clusterByKey[selectedClusterKey] : null
     const updateData = {
       mapMarkers,
       visibleMarkerCount: displayMarkers.length,
-      clusterCount: clusters.length,
-      browseTitle: displayMarkers.length ? '点击地图标记查看详情' : '当前分类暂无标记',
+      clusterCount: 0,
+      browseTitle: displayMarkers.length ? '点击地图标记查看列表' : '当前分类暂无标记',
       browseSubtitle: displayMarkers.length ?
-        `当前显示 ${displayMarkers.length} 条标记，聚合为 ${clusters.length} 个区域。` :
+        `当前显示 ${displayMarkers.length} 条标记。` :
         '可切换分类、搜索位置，或开启定位后新增标记。'
     }
 
-    if (selectedCluster) {
-      const selectedClusterMarkers = this.sortMarkersForList(selectedCluster.markers)
-      let selectedMarker = selectedClusterMarkers.find(marker => marker.id === selectedMarkerId)
-      if (!selectedMarker) {
-        selectedMarker = selectedClusterMarkers[0] || null
-        selectedMarkerId = selectedMarker ? selectedMarker.id : ''
-      }
-      const decoratedClusterMarkers = this.withSelectedListItemClass(selectedClusterMarkers, selectedMarkerId)
-      selectedMarker = decoratedClusterMarkers.find(marker => marker.id === selectedMarkerId) || null
+    const selectedGroupMarkers = this.getCurrentSelectedGroupMarkers(selectedMarkerId)
+
+    if (selectedGroupMarkers.length) {
+      const decoratedMarkers = this.withSelectedListItemClass(selectedGroupMarkers, selectedMarkerId)
 
       updateData.panelMode = opts.panelMode || 'cluster'
-      updateData.selectedClusterKey = selectedClusterKey
-      updateData.selectedClusterMarkers = decoratedClusterMarkers
+      updateData.clusterPanelBarTitle = '标记列表'
+      updateData.clusterPanelBarSubtitle = `${selectedGroupMarkers.length} 条标记，点击列表查看详情`
+      updateData.selectedClusterKey = this.getMarkerGroupKey(selectedGroupMarkers)
+      updateData.selectedClusterMarkers = decoratedMarkers
       updateData.selectedMarkerId = selectedMarkerId
-      updateData.selectedMarker = selectedMarker
+      updateData.selectedMarker = decoratedMarkers.find(marker => marker.id === selectedMarkerId) || decoratedMarkers[0]
+    } else if (selectedMarkerId && this.businessMarkerById[selectedMarkerId]) {
+      const selectedMarker = this.businessMarkerById[selectedMarkerId]
+      const decoratedMarkers = this.withSelectedListItemClass([selectedMarker], selectedMarkerId)
+
+      updateData.panelMode = opts.panelMode || 'cluster'
+      updateData.clusterPanelBarTitle = '标记列表'
+      updateData.clusterPanelBarSubtitle = '1 条标记，点击列表查看详情'
+      updateData.selectedClusterKey = this.getMarkerGroupKey([selectedMarker])
+      updateData.selectedClusterMarkers = decoratedMarkers
+      updateData.selectedMarkerId = selectedMarkerId
+      updateData.selectedMarker = decoratedMarkers[0]
     } else if (opts.clearSelection || this.data.panelMode === 'cluster' || opts.panelMode === 'cluster') {
       updateData.panelMode = opts.panelMode === 'cluster' ? 'browse' : (opts.panelMode || 'browse')
+      updateData.clusterPanelExpanded = true
+      updateData.clusterPanelStateClass = 'is-expanded'
       updateData.selectedClusterKey = ''
       updateData.selectedClusterMarkers = []
       updateData.selectedMarkerId = ''
@@ -840,9 +898,10 @@ Page({
       id,
       latitude: point.latitude,
       longitude: point.longitude,
-      iconPath: MARKER_ICON,
+      iconPath: MARKER_DOT_ICON,
       width: 36,
       height: 36,
+      joinCluster: false,
       zIndex,
       label: {
         content,
@@ -856,6 +915,276 @@ Page({
         anchorY: -18
       }
     }
+  },
+
+  buildNativeMapMarkers(displayMarkers) {
+    const mapMarkerIdToBusinessId = {}
+    const businessMarkerById = {}
+
+    const mapMarkers = displayMarkers.map(marker => {
+      const mapMarkerId = this.getStableMapMarkerId(marker.id)
+      mapMarkerIdToBusinessId[mapMarkerId] = marker.id
+      businessMarkerById[marker.id] = marker
+
+      return {
+        id: mapMarkerId,
+        latitude: marker.latitude,
+        longitude: marker.longitude,
+        iconPath: MARKER_DOT_ICON,
+        width: 32,
+        height: 32,
+        joinCluster: true
+      }
+    })
+
+    this.mapMarkerIdToBusinessId = mapMarkerIdToBusinessId
+    this.businessMarkerById = businessMarkerById
+
+    return mapMarkers
+  },
+
+  getStableMapMarkerId(businessMarkerId) {
+    if (!this.businessIdToMapMarkerId[businessMarkerId]) {
+      this.businessIdToMapMarkerId[businessMarkerId] = this.nextMapMarkerId
+      this.nextMapMarkerId += 1
+    }
+
+    return this.businessIdToMapMarkerId[businessMarkerId]
+  },
+
+  updateNativeMapMarkers(mapMarkers) {
+    if (!this.mapCtx || !this.mapCtx.addMarkers) {
+      this.debugMapLog('addMarkers fallback setData', {
+        count: mapMarkers.length
+      })
+      this.setData({
+        mapMarkers
+      })
+      return
+    }
+
+    this.mapCtx.addMarkers({
+      clear: true,
+      markers: mapMarkers,
+      success: res => {
+        this.debugMapLog('addMarkers success', {
+          count: mapMarkers.length,
+          ids: mapMarkers.map(marker => marker.id),
+          raw: res
+        })
+      },
+      fail: err => {
+        this.debugMapLog('addMarkers fail', err)
+      }
+    })
+  },
+
+  getBusinessMarkerByMapId(mapMarkerId) {
+    const businessMarkerId = this.mapMarkerIdToBusinessId[Number(mapMarkerId)]
+    return businessMarkerId ? this.businessMarkerById[businessMarkerId] : null
+  },
+
+  getMarkerIdsFromCluster(cluster) {
+    if (!cluster) {
+      return []
+    }
+
+    if (Array.isArray(cluster.markerIds)) {
+      return cluster.markerIds
+    }
+
+    if (Array.isArray(cluster.markers)) {
+      return cluster.markers
+        .map(marker => {
+          if (typeof marker === 'number' || typeof marker === 'string') {
+            return marker
+          }
+
+          return marker && (marker.id !== undefined ? marker.id : marker.markerId)
+        })
+        .filter(markerId => markerId !== undefined)
+    }
+
+    return []
+  },
+
+  showMarkerGroupByMapIds(mapMarkerIds) {
+    const markers = (mapMarkerIds || [])
+      .map(markerId => this.getBusinessMarkerByMapId(markerId))
+      .filter(Boolean)
+
+    if (markers.length) {
+      this.showMarkerGroup(markers)
+      return
+    }
+
+    this.debugMapLog('marker group resolve empty', {
+      mapMarkerIds,
+      knownMapMarkerIds: Object.keys(this.mapMarkerIdToBusinessId || {})
+    })
+  },
+
+  showMarkersNearMapTap(point) {
+    this.getCurrentMapScale(scale => {
+      const markers = this.getFallbackMarkersNearPoint(point, scale)
+
+      if (!markers.length) {
+        this.debugMapLog('map tap fallback empty', {
+          point,
+          scale
+        })
+        return
+      }
+
+      this.debugMapLog('map tap fallback match', {
+        count: markers.length,
+        markerIds: markers.map(marker => marker.id),
+        scale
+      })
+      this.showMarkerGroup(markers)
+    })
+  },
+
+  getCurrentMapScale(done) {
+    if (!this.mapCtx || !this.mapCtx.getScale) {
+      done(this.currentMapScale || this.data.scale || DEFAULT_SCALE)
+      return
+    }
+
+    this.mapCtx.getScale({
+      success: res => {
+        const scale = Number(res.scale)
+        if (scale > 0) {
+          this.currentMapScale = scale
+        }
+        done(this.currentMapScale || this.data.scale || DEFAULT_SCALE)
+      },
+      fail: () => {
+        done(this.currentMapScale || this.data.scale || DEFAULT_SCALE)
+      }
+    })
+  },
+
+  getFallbackMarkersNearPoint(point, scale) {
+    const displayMarkers = this.getDisplayMarkers()
+    const rankedMarkers = displayMarkers
+      .map(marker => Object.assign({}, marker, {
+        tapDistance: getPixelDistance(point, marker, scale)
+      }))
+      .sort((left, right) => left.tapDistance - right.tapDistance)
+
+    const nearestMarker = rankedMarkers[0]
+    if (!nearestMarker || nearestMarker.tapDistance > MARKER_TAP_FALLBACK_RADIUS_PX) {
+      return []
+    }
+
+    const directMatches = rankedMarkers.filter(marker => marker.tapDistance <= MARKER_TAP_FALLBACK_RADIUS_PX)
+    if (directMatches.length > 1) {
+      return directMatches.map(marker => this.businessMarkerById[marker.id] || marker)
+    }
+
+    return this.getFallbackClusterGroup(nearestMarker, displayMarkers, scale)
+  },
+
+  getFallbackClusterGroup(targetMarker, displayMarkers, scale) {
+    const group = [targetMarker]
+    const visited = {
+      [targetMarker.id]: true
+    }
+    let changed = true
+
+    while (changed) {
+      changed = false
+      displayMarkers.forEach(marker => {
+        if (visited[marker.id]) {
+          return
+        }
+
+        const isNearGroup = group.some(groupMarker =>
+          getPixelDistance(marker, groupMarker, scale) <= NATIVE_CLUSTER_GRID_SIZE
+        )
+
+        if (isNearGroup) {
+          visited[marker.id] = true
+          group.push(marker)
+          changed = true
+        }
+      })
+    }
+
+    return group.map(marker => this.businessMarkerById[marker.id] || marker)
+  },
+
+  getCurrentSelectedGroupMarkers(selectedMarkerId) {
+    if (!selectedMarkerId || !this.data.selectedClusterMarkers.length) {
+      return []
+    }
+
+    const markers = this.data.selectedClusterMarkers
+      .map(marker => this.businessMarkerById[marker.id])
+      .filter(Boolean)
+
+    return markers.some(marker => marker.id === selectedMarkerId) ? markers : []
+  },
+
+  showMarkerGroupByBusinessIds(businessMarkerIds) {
+    const markers = (businessMarkerIds || [])
+      .map(markerId => this.businessMarkerById[markerId])
+      .filter(Boolean)
+
+    if (markers.length) {
+      this.showMarkerGroup(markers)
+    }
+  },
+
+  setClusterPanelExpanded(expanded, options) {
+    const updateData = {
+      clusterPanelExpanded: expanded,
+      clusterPanelStateClass: expanded ? 'is-expanded' : 'is-collapsed'
+    }
+
+    if (expanded && options && options.clearDetail) {
+      updateData.selectedMarkerId = ''
+      updateData.selectedMarker = null
+      updateData.selectedClusterMarkers = this.withSelectedListItemClass(this.data.selectedClusterMarkers, '')
+    }
+
+    this.setData(updateData)
+  },
+
+  showMarkerGroup(markers) {
+    const sortedMarkers = this.sortMarkersForList(markers)
+    const nextGroupKey = this.getMarkerGroupKey(sortedMarkers)
+
+    if (
+      this.data.panelMode === 'cluster' &&
+      this.data.selectedClusterKey === nextGroupKey
+    ) {
+      return
+    }
+
+    const barSubtitle = sortedMarkers.length ?
+      `${sortedMarkers.length} 条标记，点击列表查看详情` :
+      ''
+
+    this.setData({
+      panelMode: 'cluster',
+      clusterPanelExpanded: true,
+      clusterPanelStateClass: 'is-expanded',
+      clusterPanelBarTitle: '标记列表',
+      clusterPanelBarSubtitle: barSubtitle,
+      selectedClusterKey: nextGroupKey,
+      selectedClusterMarkers: this.withSelectedListItemClass(sortedMarkers, ''),
+      selectedMarkerId: '',
+      selectedMarker: null
+    })
+  },
+
+  getMarkerGroupKey(markers) {
+    return (markers || [])
+      .map(marker => marker.id)
+      .sort()
+      .join('|')
   },
 
   getDisplayMarkers() {
@@ -919,46 +1248,16 @@ Page({
     })
   },
 
-  selectCluster(clusterKey) {
-    const cluster = this.clusterByKey[clusterKey]
-    if (!cluster) {
-      return
-    }
-
-    const selectedClusterMarkers = this.sortMarkersForList(cluster.markers)
-    const selectedMarker = selectedClusterMarkers[0] || null
-    const selectedMarkerId = selectedMarker ? selectedMarker.id : ''
-    const decoratedClusterMarkers = this.withSelectedListItemClass(selectedClusterMarkers, selectedMarkerId)
-
-    this.setData({
-      panelMode: 'cluster',
-      selectedClusterKey: clusterKey,
-      selectedClusterMarkers: decoratedClusterMarkers,
-      selectedMarkerId,
-      selectedMarker: decoratedClusterMarkers[0] || null
-    })
-  },
-
   getMarkerEventId(e) {
     const detail = e.detail || {}
-    const markerId = detail.markerId === undefined ? e.markerId : detail.markerId
+    const markerId = detail.markerId !== undefined ?
+      detail.markerId :
+      (detail.clusterId !== undefined ? detail.clusterId : (e.markerId !== undefined ? e.markerId : e.clusterId))
     return Number(markerId)
   },
 
-  findNearestClusterKey(point) {
-    let nearestClusterKey = ''
-    let nearestDistance = Infinity
-
-    Object.keys(this.clusterByKey || {}).forEach(clusterKey => {
-      const cluster = this.clusterByKey[clusterKey]
-      const distance = getDistanceMeters(point, cluster)
-      if (distance < nearestDistance) {
-        nearestDistance = distance
-        nearestClusterKey = clusterKey
-      }
-    })
-
-    return nearestDistance <= MARKER_TAP_FALLBACK_RADIUS_METERS ? nearestClusterKey : ''
+  debugMapLog(label, payload) {
+    console.log(`[MapMark] ${label}`, payload || '')
   },
 
   includePoint(point) {
@@ -978,18 +1277,6 @@ Page({
     }))
   },
 
-  findClusterKeyByMarkerId(markerId, clusters) {
-    for (let i = 0; i < clusters.length; i += 1) {
-      const cluster = clusters[i]
-      for (let j = 0; j < cluster.markers.length; j += 1) {
-        if (cluster.markers[j].id === markerId) {
-          return cluster.key
-        }
-      }
-    }
-    return ''
-  },
-
   startHighlightTimer() {
     this.clearHighlightTimer()
     this.highlightTimer = setTimeout(() => {
@@ -1005,6 +1292,13 @@ Page({
     if (this.highlightTimer) {
       clearTimeout(this.highlightTimer)
       this.highlightTimer = null
+    }
+  },
+
+  clearMapTapTimer() {
+    if (this.pendingMapTapTimer) {
+      clearTimeout(this.pendingMapTapTimer)
+      this.pendingMapTapTimer = null
     }
   }
 })

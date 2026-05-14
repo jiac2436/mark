@@ -3,6 +3,7 @@ page {
 }
 
 .page {
+  position: relative;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -134,7 +135,7 @@ page {
   position: relative;
   flex: 1;
   width: 100%;
-  min-height: 360rpx;
+  min-height: 0;
 }
 
 .map {
@@ -143,7 +144,11 @@ page {
 }
 
 .panel {
-  flex-shrink: 0;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
   padding: 22rpx 28rpx calc(22rpx + env(safe-area-inset-bottom));
   background: #ffffff;
   border-top: 1rpx solid #e5e7eb;
@@ -261,6 +266,69 @@ page {
   height: 128rpx;
   padding: 18rpx;
   line-height: 34rpx;
+}
+
+.cluster-panel-bar {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  min-height: 78rpx;
+  padding: 0 2rpx;
+  box-sizing: border-box;
+}
+
+.cluster-panel-handle {
+  flex-shrink: 0;
+  width: 58rpx;
+  height: 8rpx;
+  border-radius: 999rpx;
+  background: #d1d5db;
+}
+
+.cluster-panel-bar-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.cluster-panel-bar-title,
+.cluster-panel-bar-subtitle {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cluster-panel-bar-title {
+  color: #111827;
+  font-size: 30rpx;
+  line-height: 38rpx;
+  font-weight: 700;
+}
+
+.cluster-panel-bar-subtitle {
+  margin-top: 4rpx;
+  color: #6b7280;
+  font-size: 24rpx;
+  line-height: 30rpx;
+}
+
+.cluster-panel-body {
+  overflow: hidden;
+  transition: max-height 220ms ease, opacity 180ms ease, transform 220ms ease, margin-top 220ms ease;
+}
+
+.cluster-panel-body.is-expanded {
+  max-height: 760rpx;
+  margin-top: 12rpx;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cluster-panel-body.is-collapsed {
+  max-height: 0;
+  margin-top: 0;
+  opacity: 0;
+  transform: translateY(12rpx);
 }
 
 .cluster-count {
