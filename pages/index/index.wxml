@@ -1,5 +1,5 @@
 <view class="page">
-  <view class="header">
+  <view wx:if="{{false}}" class="header">
     <text class="location-status">{{locationLabel}}</text>
     <view class="header-actions">
       <button class="icon-button" bindtap="onSearchTap">搜索</button>
@@ -8,7 +8,7 @@
     </view>
   </view>
 
-  <scroll-view wx:if="{{showCategoryBar}}" class="category-scroll" scroll-x show-scrollbar="{{false}}">
+  <scroll-view wx:if="{{false && showCategoryBar}}" class="category-scroll" scroll-x show-scrollbar="{{false}}">
     <view class="category-list">
       <view
         wx:for="{{filterCategories}}"
@@ -22,7 +22,7 @@
     </view>
   </scroll-view>
 
-  <view wx:if="{{showPermissionStrip}}" class="permission-strip">
+  <view wx:if="{{false && showPermissionStrip}}" class="permission-strip">
     <text>浏览模式：可查看和搜索，开启定位后可创建和评价。</text>
     <button class="text-button" bindtap="onOpenSettingTap">开启定位</button>
   </view>
@@ -41,10 +41,14 @@
       bindcallouttap="onMarkerTap"
       bindregionchange="onMapRegionChange"
       bindtap="onMapTap"
-    />
+    >
+      <cover-view class="{{mapLocateButtonClass}}" bindtap="onLocateTap">
+        <cover-view class="map-locate-dot"></cover-view>
+      </cover-view>
+    </map>
   </view>
 
-  <view class="panel">
+  <view wx:if="{{panelMode !== 'browse'}}" class="panel">
     <block wx:if="{{panelMode === 'form'}}">
       <view class="panel-head">
         <view>

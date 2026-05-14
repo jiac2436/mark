@@ -143,6 +143,42 @@ page {
   height: 100%;
 }
 
+.map-locate-button {
+  position: absolute;
+  right: 28rpx;
+  bottom: 36rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.18);
+  transition: bottom 220ms ease;
+}
+
+.map-locate-button.is-above-collapsed-panel {
+  bottom: 154rpx;
+}
+
+.map-locate-button.is-above-cluster-panel {
+  bottom: 560rpx;
+}
+
+.map-locate-button.is-above-form-panel {
+  bottom: 620rpx;
+}
+
+.map-locate-dot {
+  width: 24rpx;
+  height: 24rpx;
+  border: 8rpx solid #2563eb;
+  border-radius: 50%;
+  box-sizing: border-box;
+  background: #ffffff;
+}
+
 .panel {
   position: absolute;
   left: 0;
