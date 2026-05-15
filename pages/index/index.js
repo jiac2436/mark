@@ -10,7 +10,7 @@ const FALLBACK_CENTER = {
 }
 
 const DEFAULT_SCALE = 17
-const NATIVE_CLUSTER_GRID_SIZE = 15
+const NATIVE_CLUSTER_GRID_SIZE = 48
 const MARKER_TAP_FALLBACK_RADIUS_PX = 72
 const MAP_TAP_FALLBACK_DELAY_MS = 120
 const MAP_TAP_SUPPRESS_MS = 240
@@ -617,6 +617,10 @@ Page({
   },
 
   onMarkerTap(e) {
+    if (this.data.longPressedMarkerId) {
+      this.setData({ longPressedMarkerId: '' })
+    }
+
     const markerId = this.getMarkerEventId(e)
     const businessMarker = this.getBusinessMarkerByMapId(markerId)
     this.lastMarkerInteractionAt = Date.now()
@@ -645,6 +649,10 @@ Page({
   },
 
   onMapTap(e) {
+    if (this.data.longPressedMarkerId) {
+      this.setData({ longPressedMarkerId: '' })
+    }
+
     this.debugMapLog('map tap', {
       detail: e.detail
     })
@@ -667,6 +675,10 @@ Page({
   },
 
   onMapRegionChange(e) {
+    if (this.data.longPressedMarkerId) {
+      this.setData({ longPressedMarkerId: '' })
+    }
+
     const scale = Number(e.detail && e.detail.scale)
     if (e.type === 'end' && scale > 0) {
       this.currentMapScale = scale
@@ -674,6 +686,10 @@ Page({
   },
 
   onClusterPanelBarTouchStart(e) {
+    if (this.data.longPressedMarkerId) {
+      this.setData({ longPressedMarkerId: '' })
+    }
+
     const touch = e.touches && e.touches[0]
     if (!touch) {
       return
@@ -713,6 +729,17 @@ Page({
 
   onMarkerListItemTap(e) {
     const markerId = e.currentTarget.dataset.id
+    
+    if (this.data.selectedMarkerId === markerId) {
+      const selectedClusterMarkers = this.withSelectedListItemClass(this.data.selectedClusterMarkers, '')
+      this.setData({
+        selectedMarkerId: '',
+        selectedMarker: null,
+        selectedClusterMarkers
+      })
+      return
+    }
+
     const marker = this.data.selectedClusterMarkers.find(item => item.id === markerId)
     if (!marker) {
       return
@@ -729,6 +756,23 @@ Page({
     })
   },
 
+  onMarkerListItemLongPress(e) {
+    const markerId = e.currentTarget.dataset.id
+    this.setData({
+      longPressedMarkerId: markerId
+    })
+  },
+
+  onMarkerListScroll(e) {
+    if (this.data.longPressedMarkerId) {
+      this.setData({ longPressedMarkerId: '' })
+    }
+  },
+
+  onMaskTap() {
+    this.setData({ longPressedMarkerId: '' })
+  },
+
   onVoteTap(e) {
     if (!this.data.hasLocationAuth) {
       wx.showToast({
@@ -738,7 +782,9 @@ Page({
       return
     }
 
-    const selectedMarker = this.data.selectedMarker
+    const markerId = e.currentTarget.dataset.id || (this.data.selectedMarker && this.data.selectedMarker.id)
+    const selectedMarker = this.data.selectedClusterMarkers.find(item => item.id === markerId) || this.data.selectedMarker
+    
     if (!selectedMarker) {
       return
     }
@@ -752,19 +798,43 @@ Page({
       votes[selectedMarker.id] = voteValue
     }
 
+    const isCancel = votes[selectedMarker.id] === undefined
+
     safeSetStorage(STORAGE_KEYS.votes, votes)
-    this.setData({
-      votes
-    }, () => {
-      this.refreshMapState({
-        selectedMarkerId: selectedMarker.id,
-        panelMode: 'cluster'
+    
+    if (isCancel) {
+      this.setData({
+        votes,
+        longPressedMarkerId: ''
+      }, () => {
+        this.refreshMapState({
+          selectedMarkerId: selectedMarker.id,
+          panelMode: 'cluster'
+        })
       })
-    })
+    } else {
+      this.setData({
+        votes,
+        animatingVoteValue: voteValue
+      })
+
+      setTimeout(() => {
+        this.setData({
+          longPressedMarkerId: '',
+          animatingVoteValue: null
+        }, () => {
+          this.refreshMapState({
+            selectedMarkerId: selectedMarker.id,
+            panelMode: 'cluster'
+          })
+        })
+      }, 500)
+    }
   },
 
-  onDeleteMarkerTap() {
-    const selectedMarker = this.data.selectedMarker
+  onDeleteMarkerTap(e) {
+    const markerId = e.currentTarget.dataset.id || (this.data.selectedMarker && this.data.selectedMarker.id)
+    const selectedMarker = this.data.selectedClusterMarkers.find(item => item.id === markerId) || this.data.selectedMarker
     if (!selectedMarker || !selectedMarker.isMine) {
       return
     }
