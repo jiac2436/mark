@@ -160,6 +160,54 @@ page {
   height: 100%;
 }
 
+.map-filter {
+  position: absolute;
+  top: 36rpx;
+  left: 28rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.map-filter-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.16);
+  font-size: 34rpx;
+  line-height: 76rpx;
+}
+
+.map-filter-list {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.map-filter-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 84rpx;
+  height: 56rpx;
+  padding: 0 18rpx;
+  border-radius: 28rpx;
+  color: #374151;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 6rpx 18rpx rgba(15, 23, 42, 0.12);
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.map-filter-chip.is-selected {
+  color: #ffffff;
+  background: rgba(17, 24, 39, 0.9);
+}
+
 .map-locate-button {
   position: absolute;
   right: 32rpx;
@@ -201,6 +249,24 @@ page {
   box-sizing: border-box;
   background: #ffffff;
   box-shadow: 0 2rpx 8rpx rgba(59, 130, 246, 0.4);
+}
+
+.map-create-button {
+  position: absolute;
+  top: 36rpx;
+  right: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #111827;
+  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.18);
+  font-size: 48rpx;
+  line-height: 76rpx;
+  font-weight: 600;
 }
 
 .panel {

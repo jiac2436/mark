@@ -42,6 +42,22 @@
       bindregionchange="onMapRegionChange"
       bindtap="onMapTap"
     >
+      <cover-view class="map-filter">
+        <cover-view class="map-filter-icon" catchtap="onMapFilterIconTap">🏷️</cover-view>
+        <cover-view wx:if="{{isMapFilterExpanded || activeCategory !== 'all'}}" class="map-filter-list">
+          <block wx:for="{{mapFilterCategories}}" wx:key="value">
+            <cover-view
+              wx:if="{{isMapFilterExpanded || item.value === activeCategory}}"
+              class="map-filter-chip {{item.selectedClass}}"
+              data-category="{{item.value}}"
+              catchtap="onMapFilterCategoryTap"
+            >
+              {{item.label}}
+            </cover-view>
+          </block>
+        </cover-view>
+      </cover-view>
+      <cover-view class="map-create-button" catchtap="onCreateMarkerEntryTap">+</cover-view>
       <cover-view class="{{mapLocateButtonClass}}" bindtap="onLocateTap">
         <cover-view class="map-locate-dot"></cover-view>
       </cover-view>
@@ -108,7 +124,7 @@
                       <text wx:if="{{item.isMine}}" class="mine-badge">我</text>
                     </view>
                     <view class="card-score-badge">
-                      <text class="score-label">评分</text>
+                      <text class="score-label">有用</text>
                       <text class="score-num">{{item.displayScore}}</text>
                     </view>
                   </view>
@@ -118,9 +134,6 @@
                     <text class="card-time">{{item.timeText}}</text>
                     <view wx:if="{{item.isMine}}" class="small-action-icon danger" data-id="{{item.id}}" catchtap="onDeleteMarkerTap">
                       <text>🗑</text>
-                    </view>
-                    <view wx:else class="small-action-icon" data-id="{{item.id}}" catchtap="onReportTap">
-                      <text>⚠️</text>
                     </view>
                   </view>
                 </view>

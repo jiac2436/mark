@@ -1,8 +1,4 @@
-const STORAGE_KEYS = {
-  userId: 'map_mark_user_id',
-  ownMarkers: 'map_mark_own_markers',
-  votes: 'map_mark_votes'
-}
+const api = require('../../utils/api')
 
 const FALLBACK_CENTER = {
   latitude: 31.230416,
@@ -14,6 +10,7 @@ const NATIVE_CLUSTER_GRID_SIZE = 48
 const MARKER_TAP_FALLBACK_RADIUS_PX = 72
 const MAP_TAP_FALLBACK_DELAY_MS = 120
 const MAP_TAP_SUPPRESS_MS = 240
+const MARKER_REFRESH_DEBOUNCE_MS = 300
 const CLUSTER_PANEL_SWIPE_THRESHOLD_PX = 24
 const NEW_MARKER_HIGHLIGHT_MS = 4000
 const PENDING_MARKER_ID = 900001
@@ -35,106 +32,6 @@ const CATEGORY_MAP = MARK_CATEGORIES.reduce((map, item) => {
   map[item.value] = item
   return map
 }, {})
-
-const MOCK_MARKERS = [
-  {
-    id: 'mock_001',
-    category: 'notice',
-    title: '广场入口施工',
-    description: '靠近地铁口一侧围挡较多，步行需要绕一下。',
-    latitude: 31.23051,
-    longitude: 121.47372,
-    score: 6,
-    createdAt: 1767168000000,
-    isMine: false
-  },
-  {
-    id: 'mock_002',
-    category: 'discovery',
-    title: '午后长椅很安静',
-    description: '树荫下面适合短暂停留。',
-    latitude: 31.23056,
-    longitude: 121.47378,
-    score: 4,
-    createdAt: 1767171600000,
-    isMine: false
-  },
-  {
-    id: 'mock_003',
-    category: 'complaint',
-    title: '这个路口等灯较久',
-    description: '晚高峰人多，注意预留时间。',
-    latitude: 31.23062,
-    longitude: 121.47381,
-    score: 1,
-    createdAt: 1767175200000,
-    isMine: false
-  },
-  {
-    id: 'mock_004',
-    category: 'help',
-    title: '有人捡到钥匙吗',
-    description: '下午在喷泉附近丢失一串钥匙。',
-    latitude: 31.23114,
-    longitude: 121.47447,
-    score: 2,
-    createdAt: 1767258000000,
-    isMine: false
-  },
-  {
-    id: 'mock_005',
-    category: 'discovery',
-    title: '咖啡车在这里',
-    description: '工作日中午通常会出现。',
-    latitude: 31.22991,
-    longitude: 121.47296,
-    score: 8,
-    createdAt: 1767261600000,
-    isMine: false
-  },
-  {
-    id: 'mock_006',
-    category: 'notice',
-    title: '',
-    description: '',
-    latitude: 31.22986,
-    longitude: 121.47291,
-    score: 3,
-    createdAt: 1767265200000,
-    isMine: false
-  },
-  {
-    id: 'mock_007',
-    category: 'complaint',
-    title: '临时噪音',
-    description: '下午有短时设备声。',
-    latitude: 31.23131,
-    longitude: 121.47317,
-    score: -1,
-    createdAt: 1767348000000,
-    isMine: false
-  }
-]
-
-function safeGetStorage(key, fallback) {
-  try {
-    const value = wx.getStorageSync(key)
-    return value || fallback
-  } catch (e) {
-    return fallback
-  }
-}
-
-function safeSetStorage(key, value) {
-  try {
-    wx.setStorageSync(key, value)
-  } catch (e) {
-    wx.showToast({
-      title: '本地保存失败',
-      icon: 'none'
-    })
-  }
-}
 
 function getCategoryMeta(category) {
   return CATEGORY_MAP[category] || MARK_CATEGORIES[0]
@@ -201,17 +98,20 @@ function getClusterColor(count) {
   return '#f87171'
 }
 
-function normalizeOwnMarker(marker) {
+function normalizeRemoteMarker(marker) {
+  const createdAt = marker && marker.createdAt ? new Date(marker.createdAt).getTime() : Date.now()
+
   return {
     id: marker.id,
     category: marker.category,
     title: marker.title || '',
     description: marker.description || '',
-    latitude: marker.latitude,
-    longitude: marker.longitude,
+    latitude: Number(marker.latitude),
+    longitude: Number(marker.longitude),
     score: Number(marker.score || 0),
-    createdAt: marker.createdAt || Date.now(),
-    isMine: true
+    createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+    isMine: !!marker.isMine,
+    voteValue: Number(marker.voteValue || 0)
   }
 }
 
@@ -224,6 +124,12 @@ function hasValidCoordinate(marker) {
 function buildFilterCategories(activeCategory) {
   return FILTER_CATEGORIES.map(item => Object.assign({}, item, {
     activeClass: item.value === activeCategory ? 'is-active' : ''
+  }))
+}
+
+function buildMapFilterCategories(activeCategory) {
+  return MARK_CATEGORIES.map(item => Object.assign({}, item, {
+    selectedClass: item.value === activeCategory ? 'is-selected' : ''
   }))
 }
 
@@ -243,10 +149,11 @@ Page({
     activeCategory: 'all',
     activeCategoryLabel: '全部',
     filterCategories: buildFilterCategories('all'),
+    mapFilterCategories: buildMapFilterCategories('all'),
+    isMapFilterExpanded: false,
     markCategories: MARK_CATEGORIES,
     mapMarkers: [],
-    ownMarkers: [],
-    votes: {},
+    markers: [],
     visibleMarkerCount: 0,
     clusterCount: 0,
     browseTitle: '点击地图标记查看列表',
@@ -270,7 +177,8 @@ Page({
       description: ''
     },
     searchPoint: null,
-    highlightMarkerId: ''
+    highlightMarkerId: '',
+    isLoadingMarkers: false
   },
 
   onLoad() {
@@ -281,12 +189,39 @@ Page({
     this.currentMapScale = DEFAULT_SCALE
     this.highlightTimer = null
     this.pendingMapTapTimer = null
+    this.markerRefreshTimer = null
+    this.markerRequestSeq = 0
     this.lastMarkerInteractionAt = 0
     this.clusterPanelTouchStart = null
-    this.ensureLocalUser()
-    this.loadLocalData()
+    this.hasLoadedInitialMarkers = false
     this.refreshMapState()
+    this.loginAndLoadMarkers()
     this.requestCurrentLocation(false)
+  },
+
+  onShow() {
+    const createdMarker = wx.getStorageSync('map_mark_created_marker')
+    if (!createdMarker || !hasValidCoordinate(createdMarker)) {
+      return
+    }
+
+    wx.removeStorageSync('map_mark_created_marker')
+    this.setData({
+      latitude: createdMarker.latitude,
+      longitude: createdMarker.longitude,
+      scale: DEFAULT_SCALE,
+      panelMode: 'browse',
+      selectedClusterKey: '',
+      selectedClusterMarkers: [],
+      selectedMarkerId: '',
+      selectedMarker: null
+    }, () => {
+      this.loadMarkers({
+        refreshOptions: {
+          clearSelection: true
+        }
+      })
+    })
   },
 
   onReady() {
@@ -298,30 +233,7 @@ Page({
   onUnload() {
     this.clearHighlightTimer()
     this.clearMapTapTimer()
-  },
-
-  ensureLocalUser() {
-    const savedUserId = safeGetStorage(STORAGE_KEYS.userId, '')
-    if (savedUserId) {
-      this.localUserId = savedUserId
-      return
-    }
-
-    const userId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-    this.localUserId = userId
-    safeSetStorage(STORAGE_KEYS.userId, userId)
-  },
-
-  loadLocalData() {
-    const ownMarkers = safeGetStorage(STORAGE_KEYS.ownMarkers, [])
-      .filter(marker => marker && marker.id && marker.category && hasValidCoordinate(marker))
-      .map(normalizeOwnMarker)
-    const votes = safeGetStorage(STORAGE_KEYS.votes, {})
-
-    this.setData({
-      ownMarkers,
-      votes: votes || {}
-    })
+    this.clearMarkerRefreshTimer()
   },
 
   requestCurrentLocation(showFeedback) {
@@ -330,34 +242,46 @@ Page({
       success: res => {
         const latitude = res.latitude
         const longitude = res.longitude
-
-        this.setData({
-          latitude,
-          longitude,
+        const updateData = {
           hasLocationAuth: true,
           locationLabel: '已定位到当前位置',
           showPermissionStrip: false
-        }, () => {
-          this.moveToCurrentLocation()
-        })
+        }
 
         if (showFeedback) {
-          wx.showToast({
-            title: '已更新定位',
-            icon: 'success'
-          })
+          updateData.latitude = latitude
+          updateData.longitude = longitude
         }
+
+        this.setData(updateData, () => {
+          if (showFeedback) {
+            this.moveToCurrentLocation()
+            this.loadMarkers({
+              refreshOptions: {
+                clearSelection: true
+              }
+            })
+          }
+        })
+
       },
       fail: () => {
-        this.setData({
-          latitude: FALLBACK_CENTER.latitude,
-          longitude: FALLBACK_CENTER.longitude,
-          scale: DEFAULT_SCALE,
+        const updateData = {
           hasLocationAuth: false,
           locationLabel: '浏览模式：上海人民广场',
           showPermissionStrip: true
-        }, () => {
-          this.includePoint(FALLBACK_CENTER)
+        }
+
+        if (showFeedback) {
+          updateData.latitude = FALLBACK_CENTER.latitude
+          updateData.longitude = FALLBACK_CENTER.longitude
+          updateData.scale = DEFAULT_SCALE
+        }
+
+        this.setData(updateData, () => {
+          if (showFeedback) {
+            this.includePoint(FALLBACK_CENTER)
+          }
         })
 
         if (showFeedback) {
@@ -368,6 +292,131 @@ Page({
         }
       }
     })
+  },
+
+  loginAndLoadMarkers() {
+    api.login()
+      .then(() => {
+        this.loadInitialMarkersOnce()
+      })
+      .catch(error => {
+        this.showApiError(error, '登录失败')
+      })
+  },
+
+  loadInitialMarkersOnce() {
+    if (this.hasLoadedInitialMarkers) {
+      return
+    }
+
+    this.hasLoadedInitialMarkers = true
+    this.loadMarkers()
+  },
+
+  loadMarkers(options) {
+    const opts = options || {}
+    const requestSeq = this.markerRequestSeq + 1
+    this.markerRequestSeq = requestSeq
+
+    this.setData({
+      isLoadingMarkers: true
+    })
+
+    return this.resolveVisibleBounds().then(bounds => api.fetchMarkers({
+      minLat: bounds.minLat,
+      minLng: bounds.minLng,
+      maxLat: bounds.maxLat,
+      maxLng: bounds.maxLng,
+      category: this.data.activeCategory
+    })).then(res => {
+      if (requestSeq !== this.markerRequestSeq) {
+        return []
+      }
+
+      const markers = (res.markers || [])
+        .filter(marker => marker && marker.id && marker.category && hasValidCoordinate({
+          latitude: Number(marker.latitude),
+          longitude: Number(marker.longitude)
+        }))
+        .map(normalizeRemoteMarker)
+
+      this.setData({
+        markers,
+        isLoadingMarkers: false
+      }, () => {
+        this.refreshMapState(opts.refreshOptions || {})
+      })
+
+      return markers
+    }).catch(error => {
+      if (requestSeq !== this.markerRequestSeq) {
+        return []
+      }
+
+      this.setData({
+        isLoadingMarkers: false
+      })
+      this.showApiError(error, '加载标记失败')
+      return []
+    })
+  },
+
+  scheduleMarkerRefresh(options) {
+    const refreshOptions = options || {}
+    this.clearMarkerRefreshTimer()
+    this.markerRefreshTimer = setTimeout(() => {
+      this.markerRefreshTimer = null
+      this.loadMarkers(refreshOptions)
+    }, MARKER_REFRESH_DEBOUNCE_MS)
+  },
+
+  resolveVisibleBounds() {
+    if (!this.mapCtx || !this.mapCtx.getRegion) {
+      return Promise.resolve(this.getVisibleBounds())
+    }
+
+    return new Promise(resolve => {
+      this.mapCtx.getRegion({
+        success: res => {
+          const southwest = res.southwest || {}
+          const northeast = res.northeast || {}
+          const minLat = Number(southwest.latitude)
+          const minLng = Number(southwest.longitude)
+          const maxLat = Number(northeast.latitude)
+          const maxLng = Number(northeast.longitude)
+
+          if ([minLat, minLng, maxLat, maxLng].every(Number.isFinite)) {
+            resolve({
+              minLat,
+              minLng,
+              maxLat,
+              maxLng
+            })
+            return
+          }
+
+          resolve(this.getVisibleBounds())
+        },
+        fail: () => {
+          resolve(this.getVisibleBounds())
+        }
+      })
+    })
+  },
+
+  getVisibleBounds() {
+    const latitude = Number(this.data.latitude || FALLBACK_CENTER.latitude)
+    const longitude = Number(this.data.longitude || FALLBACK_CENTER.longitude)
+    const scale = Number(this.currentMapScale || this.data.scale || DEFAULT_SCALE)
+    const span = Math.max(0.002, 1 / Math.pow(2, Math.max(scale - 9, 0)))
+    const lngSpan = span / Math.max(Math.cos(latitude * Math.PI / 180), 0.2)
+
+    return {
+      minLat: Math.max(-90, latitude - span),
+      maxLat: Math.min(90, latitude + span),
+      minLng: Math.max(-180, longitude - lngSpan),
+      maxLng: Math.min(180, longitude + lngSpan)
+    }
   },
 
   onLocateTap() {
@@ -417,7 +466,11 @@ Page({
           selectedMarker: null
         }, () => {
           this.includePoint(searchPoint)
-          this.refreshMapState({ clearSelection: true })
+          this.loadMarkers({
+            refreshOptions: {
+              clearSelection: true
+            }
+          })
         })
       },
       fail: () => {
@@ -437,6 +490,8 @@ Page({
       activeCategory: category,
       activeCategoryLabel: categoryLabel,
       filterCategories: buildFilterCategories(category),
+      mapFilterCategories: buildMapFilterCategories(category),
+      isMapFilterExpanded: false,
       panelMode: 'browse',
       mapLocateButtonClass: this.getMapLocateButtonClass('browse'),
       clusterPanelExpanded: true,
@@ -448,26 +503,112 @@ Page({
       selectedMarkerId: '',
       selectedMarker: null
     }, () => {
-      this.refreshMapState({ clearSelection: true })
+      this.loadMarkers({
+        refreshOptions: {
+          clearSelection: true
+        }
+      })
+    })
+  },
+
+  onMapFilterIconTap() {
+    if (this.data.activeCategory !== 'all') {
+      return
+    }
+
+    this.setData({
+      isMapFilterExpanded: true
+    })
+  },
+
+  onMapFilterCategoryTap(e) {
+    const category = e.currentTarget.dataset.category
+    const isCancel = this.data.activeCategory === category
+    const nextCategory = isCancel ? 'all' : category
+    const categoryLabel = nextCategory === 'all' ? '全部' : getCategoryMeta(nextCategory).label
+
+    this.setData({
+      activeCategory: nextCategory,
+      activeCategoryLabel: categoryLabel,
+      filterCategories: buildFilterCategories(nextCategory),
+      mapFilterCategories: buildMapFilterCategories(nextCategory),
+      isMapFilterExpanded: false,
+      panelMode: 'browse',
+      mapLocateButtonClass: this.getMapLocateButtonClass('browse'),
+      clusterPanelExpanded: true,
+      clusterPanelStateClass: 'is-expanded',
+      showCategoryBar: true,
+      showPermissionStrip: !this.data.hasLocationAuth,
+      selectedClusterKey: '',
+      selectedClusterMarkers: [],
+      selectedMarkerId: '',
+      selectedMarker: null
+    }, () => {
+      this.loadMarkers({
+        refreshOptions: {
+          clearSelection: true
+        }
+      })
     })
   },
 
   onStartSelectLocationTap() {
-    if (!this.data.hasLocationAuth) {
-      wx.showToast({
-        title: '开启定位后可新增标记',
-        icon: 'none'
-      })
-      return
-    }
+    this.onCreateMarkerEntryTap()
+  },
 
+  onCreateMarkerEntryTap() {
+    wx.getLocation({
+      type: 'gcj02',
+      success: location => {
+        this.setData({
+          hasLocationAuth: true,
+          locationLabel: '已定位到当前位置',
+          showPermissionStrip: false
+        })
+        this.chooseMarkerLocation(location)
+      },
+      fail: () => {
+        this.setData({
+          hasLocationAuth: false,
+          showPermissionStrip: true
+        })
+        wx.showToast({
+          title: '需要开启定位',
+          icon: 'none'
+        })
+      }
+    })
+  },
+
+  chooseMarkerLocation(userLocation) {
     wx.chooseLocation({
       success: res => {
-        this.startCreateWithPoint({
+        const point = {
           latitude: res.latitude,
           longitude: res.longitude,
           title: res.name || '',
           address: res.address || ''
+        }
+
+        api.validateMarkerLocation({
+          userLatitude: userLocation.latitude,
+          userLongitude: userLocation.longitude,
+          markerLatitude: point.latitude,
+          markerLongitude: point.longitude
+        }).then(validateResult => {
+          if (!validateResult.allowed) {
+            wx.showToast({
+              title: '超出可标记范围',
+              icon: 'none'
+            })
+            return
+          }
+
+          wx.navigateTo({
+            url: `/pages/marker-create/index?latitude=${encodeURIComponent(point.latitude)}&longitude=${encodeURIComponent(point.longitude)}&name=${encodeURIComponent(point.title)}&address=${encodeURIComponent(point.address)}`
+          })
+        }).catch(error => {
+          this.showApiError(error, '位置校验失败')
         })
       },
       fail: () => {
@@ -574,45 +715,44 @@ Page({
       return
     }
 
-    const marker = {
-      id: `own_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    api.createMarker({
       category: form.category,
       title: (form.title || '').trim(),
       description: (form.description || '').trim(),
       latitude: pendingPoint.latitude,
-      longitude: pendingPoint.longitude,
-      score: 0,
-      createdAt: Date.now(),
-      isMine: true
-    }
+      longitude: pendingPoint.longitude
+    }).then(res => {
+      const marker = normalizeRemoteMarker(res.marker)
 
-    const ownMarkers = this.data.ownMarkers.concat(marker)
-    safeSetStorage(STORAGE_KEYS.ownMarkers, ownMarkers.map(normalizeOwnMarker))
-
-    this.setData({
-      ownMarkers,
-      pendingPoint: null,
-      showCategoryBar: true,
-      showPermissionStrip: !this.data.hasLocationAuth,
-      markCategories: MARK_CATEGORIES,
-      form: {
-        category: '',
-        title: '',
-        description: ''
-      },
-      clusterPanelExpanded: true,
-      clusterPanelStateClass: 'is-expanded',
-      highlightMarkerId: marker.id
-    }, () => {
-      this.refreshMapState({
-        clearSelection: true
+      this.setData({
+        pendingPoint: null,
+        showCategoryBar: true,
+        showPermissionStrip: !this.data.hasLocationAuth,
+        markCategories: MARK_CATEGORIES,
+        form: {
+          category: '',
+          title: '',
+          description: ''
+        },
+        clusterPanelExpanded: true,
+        clusterPanelStateClass: 'is-expanded',
+        highlightMarkerId: marker.id
+      }, () => {
+        this.loadMarkers({
+          refreshOptions: {
+            clearSelection: true
+          }
+        }).then(() => {
+          this.showMarkerGroupByBusinessIds([marker.id])
+          this.startHighlightTimer()
+        })
+        wx.showToast({
+          title: '已创建标记',
+          icon: 'success'
+        })
       })
-      this.showMarkerGroupByBusinessIds([marker.id])
-      this.startHighlightTimer()
-      wx.showToast({
-        title: '已创建标记',
-        icon: 'success'
-      })
+    }).catch(error => {
+      this.showApiError(error, '创建失败')
     })
   },
 
@@ -680,8 +820,16 @@ Page({
     }
 
     const scale = Number(e.detail && e.detail.scale)
-    if (e.type === 'end' && scale > 0) {
+    if (scale > 0) {
       this.currentMapScale = scale
+    }
+
+    if (e.type === 'end' && this.data.activeCategory !== 'all') {
+      this.scheduleMarkerRefresh({
+        refreshOptions: {
+          clearSelection: true
+        }
+      })
     }
   },
 
@@ -729,7 +877,7 @@ Page({
 
   onMarkerListItemTap(e) {
     const markerId = e.currentTarget.dataset.id
-    
+
     if (this.data.selectedMarkerId === markerId) {
       const selectedClusterMarkers = this.withSelectedListItemClass(this.data.selectedClusterMarkers, '')
       this.setData({
@@ -784,13 +932,13 @@ Page({
 
     const markerId = e.currentTarget.dataset.id || (this.data.selectedMarker && this.data.selectedMarker.id)
     const selectedMarker = this.data.selectedClusterMarkers.find(item => item.id === markerId) || this.data.selectedMarker
-    
+
     if (!selectedMarker) {
       return
     }
 
-    const voteValue = Number(e.currentTarget.dataset.vote)
-    const votes = Object.assign({}, this.data.votes)
+    const rawVoteValue = Number(e.currentTarget.dataset.vote)
+    const nextVoteValue = selectedMarker.voteValue === rawVoteValue ? 0 : rawVoteValue
 
     if (votes[selectedMarker.id] === voteValue) {
       delete votes[selectedMarker.id]
@@ -801,7 +949,7 @@ Page({
     const isCancel = votes[selectedMarker.id] === undefined
 
     safeSetStorage(STORAGE_KEYS.votes, votes)
-    
+
     if (isCancel) {
       this.setData({
         votes,
@@ -830,6 +978,13 @@ Page({
         })
       }, 500)
     }
+    api.voteMarker(selectedMarker.id, nextVoteValue)
+        .then(res => {
+          this.updateMarkerVote(selectedMarker.id, res.score, res.voteValue)
+        })
+        .catch(error => {
+          this.showApiError(error, '评价失败')
+        })
   },
 
   onDeleteMarkerTap(e) {
@@ -849,31 +1004,40 @@ Page({
           return
         }
 
-        const ownMarkers = this.data.ownMarkers.filter(marker => marker.id !== selectedMarker.id)
-        const votes = Object.assign({}, this.data.votes)
-        delete votes[selectedMarker.id]
-
-        safeSetStorage(STORAGE_KEYS.ownMarkers, ownMarkers.map(normalizeOwnMarker))
-        safeSetStorage(STORAGE_KEYS.votes, votes)
-
-        this.setData({
-          ownMarkers,
-          votes,
-          highlightMarkerId: this.data.highlightMarkerId === selectedMarker.id ? '' : this.data.highlightMarkerId
-        }, () => {
-          this.refreshMapState({
-            clearSelection: true
+        api.deleteMarker(selectedMarker.id)
+          .then(() => {
+            this.setData({
+              markers: this.data.markers.filter(marker => marker.id !== selectedMarker.id),
+              highlightMarkerId: this.data.highlightMarkerId === selectedMarker.id ? '' : this.data.highlightMarkerId
+            }, () => {
+              this.refreshMapState({
+                clearSelection: true
+              })
+            })
           })
-        })
+          .catch(error => {
+            this.showApiError(error, '删除失败')
+          })
       }
     })
   },
 
   onReportTap() {
-    wx.showToast({
-      title: '已收到举报，原型暂不提交',
-      icon: 'none'
-    })
+    const selectedMarker = this.data.selectedMarker
+    if (!selectedMarker) {
+      return
+    }
+
+    api.reportMarker(selectedMarker.id, '')
+      .then(() => {
+        wx.showToast({
+          title: '已收到举报',
+          icon: 'none'
+        })
+      })
+      .catch(error => {
+        this.showApiError(error, '举报失败')
+      })
   },
 
   initNativeMarkerCluster() {
@@ -1291,21 +1455,20 @@ Page({
   },
 
   getDisplayMarkers() {
-    const votes = this.data.votes || {}
-    const allMarkers = MOCK_MARKERS.concat(this.data.ownMarkers.map(normalizeOwnMarker))
+    const allMarkers = this.data.markers || []
     const activeCategory = this.data.activeCategory
 
     return allMarkers
       .filter(marker => activeCategory === 'all' || marker.category === activeCategory)
-      .map(marker => this.decorateMarker(marker, votes))
+      .map(marker => this.decorateMarker(marker))
   },
 
-  decorateMarker(marker, votes) {
+  decorateMarker(marker) {
     const categoryMeta = getCategoryMeta(marker.category)
     const title = (marker.title || '').trim()
     const description = (marker.description || '').trim()
-    const voteValue = Number(votes[marker.id] || 0)
-    const displayScore = Number(marker.score || 0) + voteValue
+    const voteValue = Number(marker.voteValue || 0)
+    const displayScore = Number(marker.score || 0)
 
     return {
       id: marker.id,
@@ -1330,6 +1493,28 @@ Page({
       likeButtonClass: voteValue === 1 ? 'vote-button is-active' : 'vote-button',
       dislikeButtonClass: voteValue === -1 ? 'vote-button is-active' : 'vote-button'
     }
+  },
+
+  updateMarkerVote(markerId, score, voteValue) {
+    const markers = this.data.markers.map(marker => {
+      if (marker.id !== markerId) {
+        return marker
+      }
+
+      return Object.assign({}, marker, {
+        score: Number(score || 0),
+        voteValue: Number(voteValue || 0)
+      })
+    })
+
+    this.setData({
+      markers
+    }, () => {
+      this.refreshMapState({
+        selectedMarkerId: markerId,
+        panelMode: 'cluster'
+      })
+    })
   },
 
   sortMarkersForList(markers) {
@@ -1361,6 +1546,15 @@ Page({
 
   debugMapLog(label, payload) {
     console.log(`[MapMark] ${label}`, payload || '')
+  },
+
+  showApiError(error, fallbackTitle) {
+    const message = error && error.message ? error.message : fallbackTitle
+    wx.showToast({
+      title: message.length > 12 ? fallbackTitle : message,
+      icon: 'none'
+    })
+    this.debugMapLog(fallbackTitle, error)
   },
 
   includePoint(point) {
@@ -1402,6 +1596,13 @@ Page({
     if (this.pendingMapTapTimer) {
       clearTimeout(this.pendingMapTapTimer)
       this.pendingMapTapTimer = null
+    }
+  },
+
+  clearMarkerRefreshTimer() {
+    if (this.markerRefreshTimer) {
+      clearTimeout(this.markerRefreshTimer)
+      this.markerRefreshTimer = null
     }
   }
 })
