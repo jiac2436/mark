@@ -73,50 +73,6 @@ page {
   box-shadow: 0 4rpx 12rpx rgba(15, 23, 42, 0.15);
 }
 
-.category-scroll {
-  flex-shrink: 0;
-  height: 100rpx;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-top: 1rpx solid rgba(0, 0, 0, 0.03);
-  z-index: 10;
-}
-
-.category-list {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  width: max-content;
-  min-width: 100%;
-  height: 100rpx;
-  padding: 0 32rpx;
-  box-sizing: border-box;
-}
-
-.category-chip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 96rpx;
-  height: 60rpx;
-  padding: 0 32rpx;
-  box-sizing: border-box;
-  border-radius: 999rpx;
-  color: #475569;
-  background: #f1f5f9;
-  font-size: 26rpx;
-  font-weight: 500;
-  white-space: nowrap;
-  transition: all 0.2s ease;
-}
-
-.category-chip.is-active {
-  color: #ffffff;
-  background: #0f172a;
-  box-shadow: 0 4rpx 12rpx rgba(15, 23, 42, 0.15);
-}
-
 .permission-strip {
   display: flex;
   align-items: center;
@@ -186,6 +142,8 @@ page {
   display: flex;
   align-items: center;
   gap: 10rpx;
+  max-width: 540rpx;
+  flex-wrap: wrap;
 }
 
 .map-filter-chip {
@@ -235,10 +193,6 @@ page {
 
 .map-locate-button.is-above-cluster-panel {
   bottom: 600rpx;
-}
-
-.map-locate-button.is-above-form-panel {
-  bottom: 660rpx;
 }
 
 .map-locate-dot {
@@ -310,13 +264,6 @@ page {
   line-height: 36rpx;
 }
 
-.panel-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 20rpx;
-  margin-top: 32rpx;
-}
-
 .primary-button {
   min-width: 200rpx;
   color: #ffffff;
@@ -345,70 +292,6 @@ page {
   color: #ffffff;
   background: #ef4444;
   box-shadow: 0 4rpx 12rpx rgba(239, 68, 68, 0.2);
-}
-
-.form-section {
-  margin-top: 24rpx;
-}
-
-.field-label {
-  margin: 24rpx 0 12rpx;
-  color: #334155;
-  font-size: 26rpx;
-  font-weight: 700;
-}
-
-.form-category-list {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16rpx;
-}
-
-.form-category {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 68rpx;
-  border-radius: 16rpx;
-  color: #475569;
-  background: #f1f5f9;
-  font-size: 26rpx;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.form-category.is-selected {
-  color: #ffffff;
-  background: #0f172a;
-  box-shadow: 0 4rpx 12rpx rgba(15, 23, 42, 0.15);
-}
-
-.text-input,
-.textarea-input {
-  width: 100%;
-  box-sizing: border-box;
-  border-radius: 20rpx;
-  background: #f1f5f9;
-  color: #0f172a;
-  font-size: 28rpx;
-  border: 2rpx solid transparent;
-  transition: border-color 0.2s;
-}
-
-.text-input:focus,
-.textarea-input:focus {
-  border-color: #cbd5e1;
-}
-
-.text-input {
-  height: 88rpx;
-  padding: 0 24rpx;
-}
-
-.textarea-input {
-  height: 160rpx;
-  padding: 24rpx;
-  line-height: 40rpx;
 }
 
 .cluster-panel-drag-area {
@@ -631,8 +514,13 @@ page {
   letter-spacing: 0.5rpx;
 }
 
+.category-fishing {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
 .category-discovery {
-  color: #059669;
+  color: #047857;
   background: #d1fae5;
 }
 
@@ -641,14 +529,24 @@ page {
   background: #dbeafe;
 }
 
-.category-complaint {
+.category-urgent {
   color: #dc2626;
   background: #fee2e2;
+}
+
+.category-lost_found {
+  color: #7c3aed;
+  background: #ede9fe;
 }
 
 .category-help {
   color: #ea580c;
   background: #ffedd5;
+}
+
+.category-kindness {
+  color: #be123c;
+  background: #ffe4e6;
 }
 
 .mine-badge {
@@ -689,6 +587,25 @@ page {
   -webkit-box-orient: vertical;
 }
 
+.card-image-scroll {
+  width: 100%;
+  margin-top: 14rpx;
+}
+
+.card-image-list {
+  display: flex;
+  gap: 12rpx;
+  width: max-content;
+}
+
+.card-image {
+  width: 108rpx;
+  height: 108rpx;
+  flex-shrink: 0;
+  border-radius: 8rpx;
+  background: #e5e7eb;
+}
+
 .card-bottom {
   display: flex;
   align-items: flex-end;
@@ -700,6 +617,12 @@ page {
 .card-time {
   color: #94a3b8;
   font-size: 22rpx;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
 }
 
 .small-action-icon {

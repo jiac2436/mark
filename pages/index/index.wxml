@@ -8,20 +8,6 @@
     </view>
   </view>
 
-  <scroll-view wx:if="{{false && showCategoryBar}}" class="category-scroll" scroll-x show-scrollbar="{{false}}">
-    <view class="category-list">
-      <view
-        wx:for="{{filterCategories}}"
-        wx:key="value"
-        class="category-chip {{item.activeClass}}"
-        data-category="{{item.value}}"
-        bindtap="onCategoryTap"
-      >
-        {{item.label}}
-      </view>
-    </view>
-  </scroll-view>
-
   <view wx:if="{{false && showPermissionStrip}}" class="permission-strip">
     <text>浏览模式：可查看和搜索，开启定位后可创建和评价。</text>
     <button class="text-button" bindtap="onOpenSettingTap">开启定位</button>
@@ -65,38 +51,7 @@
   </view>
 
   <view wx:if="{{panelMode !== 'browse'}}" class="panel">
-    <block wx:if="{{panelMode === 'form'}}">
-      <view class="panel-head">
-        <view>
-          <text class="panel-title">创建标记</text>
-          <text class="panel-subtitle">{{pendingPoint.name}} · {{pendingPoint.latitudeText}}, {{pendingPoint.longitudeText}}</text>
-        </view>
-      </view>
-      <view class="form-section">
-        <view class="field-label">分类</view>
-        <view class="form-category-list">
-          <view
-            wx:for="{{markCategories}}"
-            wx:key="value"
-            class="form-category {{item.selectedClass}}"
-            data-category="{{item.value}}"
-            bindtap="onFormCategoryTap"
-          >
-            {{item.label}}
-          </view>
-        </view>
-        <view class="field-label">标题</view>
-        <input class="text-input" value="{{form.title}}" maxlength="24" placeholder="可不填" bindinput="onTitleInput" />
-        <view class="field-label">描述</view>
-        <textarea class="textarea-input" value="{{form.description}}" maxlength="120" placeholder="可不填" bindinput="onDescriptionInput" />
-      </view>
-      <view class="panel-actions">
-        <button class="secondary-button" bindtap="onCancelCreateTap">取消</button>
-        <button class="primary-button" bindtap="onSaveMarkerTap">保存标记</button>
-      </view>
-    </block>
-
-    <block wx:elif="{{panelMode === 'cluster'}}">
+    <block wx:if="{{panelMode === 'cluster'}}">
       <view
         class="cluster-panel-drag-area"
         bindtouchstart="onClusterPanelBarTouchStart"
@@ -130,10 +85,29 @@
                   </view>
                   <text class="card-title">{{item.displayTitle}}</text>
                   <text class="card-desc">{{item.displayDescription}}</text>
+                  <scroll-view wx:if="{{item.images.length}}" class="card-image-scroll" scroll-x show-scrollbar="{{false}}">
+                    <view class="card-image-list">
+                      <image
+                        wx:for="{{item.images}}"
+                        wx:key="id"
+                        class="card-image"
+                        src="{{item.fullUrl}}"
+                        mode="aspectFill"
+                        data-id="{{item.id}}"
+                        data-url="{{item.fullUrl}}"
+                        catchtap="onPreviewMarkerImageTap"
+                      />
+                    </view>
+                  </scroll-view>
                   <view class="card-bottom">
                     <text class="card-time">{{item.timeText}}</text>
-                    <view wx:if="{{item.isMine}}" class="small-action-icon danger" data-id="{{item.id}}" catchtap="onDeleteMarkerTap">
-                      <text>🗑</text>
+                    <view class="card-actions">
+                      <view wx:if="{{selectedMarkerId === item.id}}" class="small-action-icon" data-id="{{item.id}}" catchtap="onNavigateMarkerTap">
+                        <text>🧭</text>
+                      </view>
+                      <view wx:if="{{selectedMarkerId === item.id && item.isMine}}" class="small-action-icon danger" data-id="{{item.id}}" catchtap="onDeleteMarkerTap">
+                        <text>🗑</text>
+                      </view>
                     </view>
                   </view>
                 </view>

@@ -1,4 +1,5 @@
 const api = require('../../utils/api')
+const { API_BASE_URL } = require('../../config/api')
 
 const FALLBACK_CENTER = {
   latitude: 31.230416,
@@ -11,22 +12,23 @@ const MARKER_TAP_FALLBACK_RADIUS_PX = 72
 const MAP_TAP_FALLBACK_DELAY_MS = 120
 const MAP_TAP_SUPPRESS_MS = 240
 const MARKER_REFRESH_DEBOUNCE_MS = 300
+const CREATED_MARKER_REFRESH_DELAY_MS = 500
 const CLUSTER_PANEL_SWIPE_THRESHOLD_PX = 24
 const NEW_MARKER_HIGHLIGHT_MS = 4000
-const PENDING_MARKER_ID = 900001
 const HIGHLIGHT_MARKER_ID = 900002
 const MARKER_DOT_ICON = '/assets/marker-dot.png'
+const CATEGORY_MARKER_SIZE = 44
+const SELECTED_CATEGORY_MARKER_SIZE = 58
 
 const MARK_CATEGORIES = [
-  { value: 'discovery', label: '发现', defaultTitle: '一个发现标记' },
-  { value: 'notice', label: '提醒', defaultTitle: '一个提醒标记' },
-  { value: 'complaint', label: '吐槽', defaultTitle: '一个吐槽标记' },
-  { value: 'help', label: '求助', defaultTitle: '一个求助标记' }
+  { value: 'fishing', label: '钓点', defaultTitle: '一个钓点标记', iconPath: '/assets/fishing.png' },
+  { value: 'discovery', label: '发现', defaultTitle: '一个发现标记', iconPath: '/assets/discovery.png' },
+  { value: 'notice', label: '提醒', defaultTitle: '一个提醒标记', iconPath: '/assets/notice.png' },
+  { value: 'urgent', label: '紧急', defaultTitle: '一个紧急标记', iconPath: '/assets/urgent.png' },
+  { value: 'lost_found', label: '刻舟', defaultTitle: '一个刻舟标记', iconPath: '/assets/lost_found.png' },
+  { value: 'help', label: '求助', defaultTitle: '一个求助标记', iconPath: '/assets/help.png' },
+  { value: 'kindness', label: '热心肠', defaultTitle: '一个热心肠标记', iconPath: '/assets/kindness.png' }
 ]
-
-const FILTER_CATEGORIES = [
-  { value: 'all', label: '全部' }
-].concat(MARK_CATEGORIES)
 
 const CATEGORY_MAP = MARK_CATEGORIES.reduce((map, item) => {
   map[item.value] = item
@@ -34,11 +36,7 @@ const CATEGORY_MAP = MARK_CATEGORIES.reduce((map, item) => {
 }, {})
 
 function getCategoryMeta(category) {
-  return CATEGORY_MAP[category] || MARK_CATEGORIES[0]
-}
-
-function formatCoordinate(value) {
-  return Number(value).toFixed(6)
+  return CATEGORY_MAP[category] || CATEGORY_MAP.discovery || MARK_CATEGORIES[0]
 }
 
 function formatTime(createdAt) {
@@ -111,8 +109,20 @@ function normalizeRemoteMarker(marker) {
     score: Number(marker.score || 0),
     createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
     isMine: !!marker.isMine,
-    voteValue: Number(marker.voteValue || 0)
+    voteValue: Number(marker.voteValue || 0),
+    images: Array.isArray(marker.images) ? marker.images : []
   }
+}
+
+function getImageUrl(image) {
+  const url = image && image.url ? image.url : ''
+  if (!url) {
+    return ''
+  }
+  if (/^https?:\/\//.test(url)) {
+    return url
+  }
+  return `${API_BASE_URL}${url}`
 }
 
 function hasValidCoordinate(marker) {
@@ -121,19 +131,7 @@ function hasValidCoordinate(marker) {
     typeof marker.longitude === 'number'
 }
 
-function buildFilterCategories(activeCategory) {
-  return FILTER_CATEGORIES.map(item => Object.assign({}, item, {
-    activeClass: item.value === activeCategory ? 'is-active' : ''
-  }))
-}
-
 function buildMapFilterCategories(activeCategory) {
-  return MARK_CATEGORIES.map(item => Object.assign({}, item, {
-    selectedClass: item.value === activeCategory ? 'is-selected' : ''
-  }))
-}
-
-function buildMarkCategories(activeCategory) {
   return MARK_CATEGORIES.map(item => Object.assign({}, item, {
     selectedClass: item.value === activeCategory ? 'is-selected' : ''
   }))
@@ -147,11 +145,8 @@ Page({
     hasLocationAuth: false,
     locationLabel: '浏览模式：上海人民广场',
     activeCategory: 'all',
-    activeCategoryLabel: '全部',
-    filterCategories: buildFilterCategories('all'),
     mapFilterCategories: buildMapFilterCategories('all'),
     isMapFilterExpanded: false,
-    markCategories: MARK_CATEGORIES,
     mapMarkers: [],
     markers: [],
     visibleMarkerCount: 0,
@@ -164,18 +159,11 @@ Page({
     clusterPanelStateClass: 'is-expanded',
     clusterPanelBarTitle: '标记列表',
     clusterPanelBarSubtitle: '',
-    showCategoryBar: true,
     showPermissionStrip: false,
     selectedClusterKey: '',
     selectedClusterMarkers: [],
     selectedMarkerId: '',
     selectedMarker: null,
-    pendingPoint: null,
-    form: {
-      category: '',
-      title: '',
-      description: ''
-    },
     searchPoint: null,
     highlightMarkerId: '',
     isLoadingMarkers: false
@@ -214,11 +202,25 @@ Page({
       selectedClusterKey: '',
       selectedClusterMarkers: [],
       selectedMarkerId: '',
-      selectedMarker: null
+      selectedMarker: null,
+      highlightMarkerId: createdMarker.id
     }, () => {
-      this.loadMarkers({
+      this.refreshMarkersAfterViewChange({
         refreshOptions: {
           clearSelection: true
+        }
+      }).then(() => {
+        this.showMarkerGroupByBusinessIds([createdMarker.id])
+        this.startHighlightTimer()
+      })
+
+      this.scheduleMarkerRefresh({
+        delay: CREATED_MARKER_REFRESH_DELAY_MS,
+        refreshOptions: {
+          clearSelection: true
+        },
+        afterLoad: () => {
+          this.showMarkerGroupByBusinessIds([createdMarker.id])
         }
       })
     })
@@ -256,7 +258,7 @@ Page({
         this.setData(updateData, () => {
           if (showFeedback) {
             this.moveToCurrentLocation()
-            this.loadMarkers({
+            this.refreshMarkersAfterViewChange({
               refreshOptions: {
                 clearSelection: true
               }
@@ -322,13 +324,7 @@ Page({
       isLoadingMarkers: true
     })
 
-    return this.resolveVisibleBounds().then(bounds => api.fetchMarkers({
-      minLat: bounds.minLat,
-      minLng: bounds.minLng,
-      maxLat: bounds.maxLat,
-      maxLng: bounds.maxLng,
-      category: this.data.activeCategory
-    })).then(res => {
+    return this.resolveVisibleBounds().then(bounds => api.fetchMarkers(this.buildMarkerQuery(bounds))).then(res => {
       if (requestSeq !== this.markerRequestSeq) {
         return []
       }
@@ -356,18 +352,54 @@ Page({
       this.setData({
         isLoadingMarkers: false
       })
+
+      if (this.isBoundsTooLargeError(error)) {
+        wx.showToast({
+          title: '搜索范围太大了',
+          icon: 'none'
+        })
+        this.debugMapLog('load markers skipped: bounds too large', error)
+        return this.data.markers || []
+      }
+
       this.showApiError(error, '加载标记失败')
       return []
     })
   },
 
+  buildMarkerQuery(bounds) {
+    const query = {
+      minLat: bounds.minLat,
+      minLng: bounds.minLng,
+      maxLat: bounds.maxLat,
+      maxLng: bounds.maxLng
+    }
+
+    if (this.data.activeCategory !== 'all') {
+      query.category = this.data.activeCategory
+    }
+
+    return query
+  },
+
+  refreshMarkersAfterViewChange(options) {
+    return this.loadMarkers(options || {})
+  },
+
   scheduleMarkerRefresh(options) {
-    const refreshOptions = options || {}
+    const opts = options || {}
+    const loadOptions = opts.refreshOptions ? {
+      refreshOptions: opts.refreshOptions
+    } : opts
     this.clearMarkerRefreshTimer()
     this.markerRefreshTimer = setTimeout(() => {
       this.markerRefreshTimer = null
-      this.loadMarkers(refreshOptions)
-    }, MARKER_REFRESH_DEBOUNCE_MS)
+      this.refreshMarkersAfterViewChange(loadOptions).then(markers => {
+        if (typeof opts.afterLoad === 'function') {
+          opts.afterLoad(markers)
+        }
+      })
+    }, opts.delay || MARKER_REFRESH_DEBOUNCE_MS)
   },
 
   resolveVisibleBounds() {
@@ -458,7 +490,6 @@ Page({
           mapLocateButtonClass: this.getMapLocateButtonClass('browse'),
           clusterPanelExpanded: true,
           clusterPanelStateClass: 'is-expanded',
-          showCategoryBar: true,
           showPermissionStrip: !this.data.hasLocationAuth,
           selectedClusterKey: '',
           selectedClusterMarkers: [],
@@ -466,7 +497,7 @@ Page({
           selectedMarker: null
         }, () => {
           this.includePoint(searchPoint)
-          this.loadMarkers({
+          this.refreshMarkersAfterViewChange({
             refreshOptions: {
               clearSelection: true
             }
@@ -482,42 +513,13 @@ Page({
     })
   },
 
-  onCategoryTap(e) {
-    const category = e.currentTarget.dataset.category
-    const categoryLabel = category === 'all' ? '全部' : getCategoryMeta(category).label
-
-    this.setData({
-      activeCategory: category,
-      activeCategoryLabel: categoryLabel,
-      filterCategories: buildFilterCategories(category),
-      mapFilterCategories: buildMapFilterCategories(category),
-      isMapFilterExpanded: false,
-      panelMode: 'browse',
-      mapLocateButtonClass: this.getMapLocateButtonClass('browse'),
-      clusterPanelExpanded: true,
-      clusterPanelStateClass: 'is-expanded',
-      showCategoryBar: true,
-      showPermissionStrip: !this.data.hasLocationAuth,
-      selectedClusterKey: '',
-      selectedClusterMarkers: [],
-      selectedMarkerId: '',
-      selectedMarker: null
-    }, () => {
-      this.loadMarkers({
-        refreshOptions: {
-          clearSelection: true
-        }
-      })
-    })
-  },
-
   onMapFilterIconTap() {
     if (this.data.activeCategory !== 'all') {
       return
     }
 
     this.setData({
-      isMapFilterExpanded: true
+      isMapFilterExpanded: !this.data.isMapFilterExpanded
     })
   },
 
@@ -529,22 +531,19 @@ Page({
 
     this.setData({
       activeCategory: nextCategory,
-      activeCategoryLabel: categoryLabel,
-      filterCategories: buildFilterCategories(nextCategory),
       mapFilterCategories: buildMapFilterCategories(nextCategory),
       isMapFilterExpanded: false,
       panelMode: 'browse',
       mapLocateButtonClass: this.getMapLocateButtonClass('browse'),
       clusterPanelExpanded: true,
       clusterPanelStateClass: 'is-expanded',
-      showCategoryBar: true,
       showPermissionStrip: !this.data.hasLocationAuth,
       selectedClusterKey: '',
       selectedClusterMarkers: [],
       selectedMarkerId: '',
       selectedMarker: null
     }, () => {
-      this.loadMarkers({
+      this.refreshMarkersAfterViewChange({
         refreshOptions: {
           clearSelection: true
         }
@@ -620,142 +619,6 @@ Page({
     })
   },
 
-  startCreateWithPoint(point) {
-    if (!hasValidCoordinate(point)) {
-      return
-    }
-
-    const title = point.title || ''
-    const description = point.address || ''
-    const pendingPoint = {
-      latitude: point.latitude,
-      longitude: point.longitude,
-      latitudeText: formatCoordinate(point.latitude),
-      longitudeText: formatCoordinate(point.longitude),
-      name: title || '当前选点',
-      address: description
-    }
-
-    this.setData({
-      panelMode: 'form',
-      mapLocateButtonClass: this.getMapLocateButtonClass('form'),
-      clusterPanelExpanded: true,
-      clusterPanelStateClass: 'is-expanded',
-      showCategoryBar: false,
-      showPermissionStrip: false,
-      pendingPoint,
-      selectedClusterKey: '',
-      selectedClusterMarkers: [],
-      selectedMarkerId: '',
-      selectedMarker: null,
-      markCategories: MARK_CATEGORIES,
-      form: {
-        category: '',
-        title,
-        description
-      }
-    }, () => {
-      this.refreshMapState({ clearSelection: true, panelMode: 'form' })
-    })
-  },
-
-  onCancelCreateTap() {
-    this.setData({
-      panelMode: 'browse',
-      mapLocateButtonClass: this.getMapLocateButtonClass('browse'),
-      clusterPanelExpanded: true,
-      clusterPanelStateClass: 'is-expanded',
-      showCategoryBar: true,
-      showPermissionStrip: !this.data.hasLocationAuth,
-      pendingPoint: null,
-      markCategories: MARK_CATEGORIES,
-      form: {
-        category: '',
-        title: '',
-        description: ''
-      }
-    }, () => {
-      this.refreshMapState({ clearSelection: true })
-    })
-  },
-
-  onFormCategoryTap(e) {
-    const category = e.currentTarget.dataset.category
-    this.setData({
-      markCategories: buildMarkCategories(category),
-      'form.category': category
-    })
-  },
-
-  onTitleInput(e) {
-    this.setData({
-      'form.title': e.detail.value
-    })
-  },
-
-  onDescriptionInput(e) {
-    this.setData({
-      'form.description': e.detail.value
-    })
-  },
-
-  onSaveMarkerTap() {
-    const pendingPoint = this.data.pendingPoint
-    const form = this.data.form
-
-    if (!pendingPoint) {
-      return
-    }
-
-    if (!form.category) {
-      wx.showToast({
-        title: '请选择分类',
-        icon: 'none'
-      })
-      return
-    }
-
-    api.createMarker({
-      category: form.category,
-      title: (form.title || '').trim(),
-      description: (form.description || '').trim(),
-      latitude: pendingPoint.latitude,
-      longitude: pendingPoint.longitude
-    }).then(res => {
-      const marker = normalizeRemoteMarker(res.marker)
-
-      this.setData({
-        pendingPoint: null,
-        showCategoryBar: true,
-        showPermissionStrip: !this.data.hasLocationAuth,
-        markCategories: MARK_CATEGORIES,
-        form: {
-          category: '',
-          title: '',
-          description: ''
-        },
-        clusterPanelExpanded: true,
-        clusterPanelStateClass: 'is-expanded',
-        highlightMarkerId: marker.id
-      }, () => {
-        this.loadMarkers({
-          refreshOptions: {
-            clearSelection: true
-          }
-        }).then(() => {
-          this.showMarkerGroupByBusinessIds([marker.id])
-          this.startHighlightTimer()
-        })
-        wx.showToast({
-          title: '已创建标记',
-          icon: 'success'
-        })
-      })
-    }).catch(error => {
-      this.showApiError(error, '创建失败')
-    })
-  },
-
   onMarkerTap(e) {
     if (this.data.longPressedMarkerId) {
       this.setData({ longPressedMarkerId: '' })
@@ -773,10 +636,6 @@ Page({
       hasBusinessMarker: !!businessMarker,
       businessMarkerId: businessMarker ? businessMarker.id : ''
     })
-
-    if (markerId === PENDING_MARKER_ID) {
-      return
-    }
 
     if (markerId === HIGHLIGHT_MARKER_ID && this.data.highlightMarkerId) {
       this.showMarkerGroupByBusinessIds([this.data.highlightMarkerId])
@@ -824,12 +683,8 @@ Page({
       this.currentMapScale = scale
     }
 
-    if (e.type === 'end' && this.data.activeCategory !== 'all') {
-      this.scheduleMarkerRefresh({
-        refreshOptions: {
-          clearSelection: true
-        }
-      })
+    if (e.type === 'end') {
+      this.scheduleMarkerRefresh()
     }
   },
 
@@ -884,6 +739,8 @@ Page({
         selectedMarkerId: '',
         selectedMarker: null,
         selectedClusterMarkers
+      }, () => {
+        this.refreshMapSelectionState()
       })
       return
     }
@@ -901,6 +758,8 @@ Page({
       selectedMarkerId: markerId,
       selectedMarker: selectedClusterMarkers.find(item => item.id === markerId),
       selectedClusterMarkers
+    }, () => {
+      this.refreshMapSelectionState()
     })
   },
 
@@ -938,32 +797,21 @@ Page({
     }
 
     const rawVoteValue = Number(e.currentTarget.dataset.vote)
-    const nextVoteValue = selectedMarker.voteValue === rawVoteValue ? 0 : rawVoteValue
-
-    if (votes[selectedMarker.id] === voteValue) {
-      delete votes[selectedMarker.id]
-    } else {
-      votes[selectedMarker.id] = voteValue
+    if (![1, -1].includes(rawVoteValue)) {
+      return
     }
 
-    const isCancel = votes[selectedMarker.id] === undefined
-
-    safeSetStorage(STORAGE_KEYS.votes, votes)
+    const nextVoteValue = Number(selectedMarker.voteValue || 0) === rawVoteValue ? 0 : rawVoteValue
+    const isCancel = nextVoteValue === 0
 
     if (isCancel) {
       this.setData({
-        votes,
-        longPressedMarkerId: ''
-      }, () => {
-        this.refreshMapState({
-          selectedMarkerId: selectedMarker.id,
-          panelMode: 'cluster'
-        })
+        longPressedMarkerId: '',
+        animatingVoteValue: null
       })
     } else {
       this.setData({
-        votes,
-        animatingVoteValue: voteValue
+        animatingVoteValue: rawVoteValue
       })
 
       setTimeout(() => {
@@ -978,6 +826,7 @@ Page({
         })
       }, 500)
     }
+
     api.voteMarker(selectedMarker.id, nextVoteValue)
         .then(res => {
           this.updateMarkerVote(selectedMarker.id, res.score, res.voteValue)
@@ -1022,6 +871,61 @@ Page({
     })
   },
 
+  onNavigateMarkerTap(e) {
+    const markerId = e.currentTarget.dataset.id || (this.data.selectedMarker && this.data.selectedMarker.id)
+    const selectedMarker = this.data.selectedClusterMarkers.find(item => item.id === markerId) || this.data.selectedMarker
+    if (!selectedMarker || !hasValidCoordinate(selectedMarker)) {
+      wx.showToast({
+        title: '位置无效',
+        icon: 'none'
+      })
+      return
+    }
+
+    wx.showModal({
+      title: '到这里去',
+      content: '即将打开微信地图查看路线',
+      confirmText: '打开地图',
+      success: res => {
+        if (!res.confirm) {
+          return
+        }
+
+        wx.openLocation({
+          latitude: selectedMarker.latitude,
+          longitude: selectedMarker.longitude,
+          name: selectedMarker.displayTitle,
+          address: selectedMarker.displayDescription,
+          scale: 18,
+          fail: () => {
+            wx.showToast({
+              title: '打开地图失败',
+              icon: 'none'
+            })
+          }
+        })
+      }
+    })
+  },
+
+  onPreviewMarkerImageTap(e) {
+    const markerId = e.currentTarget.dataset.id
+    const currentUrl = e.currentTarget.dataset.url
+    const marker = this.data.selectedClusterMarkers.find(item =>
+      (item.images || []).some(image => image.id === markerId)
+    )
+    const urls = marker ? (marker.images || []).map(image => image.fullUrl).filter(Boolean) : [currentUrl]
+
+    if (!currentUrl || !urls.length) {
+      return
+    }
+
+    wx.previewImage({
+      current: currentUrl,
+      urls
+    })
+  },
+
   onReportTap() {
     const selectedMarker = this.data.selectedMarker
     if (!selectedMarker) {
@@ -1060,7 +964,10 @@ Page({
       gridSize: NATIVE_CLUSTER_GRID_SIZE,
       zoomOnClick: false,
       success: res => {
-        this.debugMapLog('initMarkerCluster success', res)
+        this.debugMapLog('initMarkerCluster success', {
+          gridSize: NATIVE_CLUSTER_GRID_SIZE,
+          raw: res
+        })
       },
       fail: err => {
         this.debugMapLog('initMarkerCluster fail', err)
@@ -1072,7 +979,10 @@ Page({
     const cluster = res.cluster || res
     this.lastMarkerInteractionAt = Date.now()
     this.clearMapTapTimer()
-    this.debugMapLog('markerClusterClick', res)
+    this.debugMapLog('markerClusterClick', {
+      markerIds: this.getMarkerIdsFromCluster(cluster),
+      raw: res
+    })
     this.showMarkerGroupByMapIds(this.getMarkerIdsFromCluster(cluster))
   },
 
@@ -1080,10 +990,6 @@ Page({
     const opts = options || {}
     const displayMarkers = this.getDisplayMarkers()
     const mapMarkers = this.buildNativeMapMarkers(displayMarkers)
-
-    if (this.data.pendingPoint) {
-      mapMarkers.push(this.createSpecialMarker(PENDING_MARKER_ID, this.data.pendingPoint, '+', '#2563eb', 90))
-    }
 
     if (this.data.highlightMarkerId) {
       const highlightedMarker = displayMarkers.find(marker => marker.id === this.data.highlightMarkerId)
@@ -1094,6 +1000,12 @@ Page({
 
     this.updateNativeMapMarkers(mapMarkers)
 
+    const shouldPreservePanel = !opts.clearSelection && !opts.selectedMarkerId && this.data.panelMode === 'cluster'
+    let preservedPanel = null
+    if (shouldPreservePanel) {
+      preservedPanel = this.getPreservedClusterPanelState()
+    }
+
     let selectedMarkerId = opts.clearSelection ? '' : (opts.selectedMarkerId || this.data.selectedMarkerId)
     const updateData = {
       mapMarkers,
@@ -1103,6 +1015,14 @@ Page({
       browseSubtitle: displayMarkers.length ?
         `当前显示 ${displayMarkers.length} 条标记。` :
         '可切换分类、搜索位置，或开启定位后新增标记。'
+    }
+
+    if (preservedPanel) {
+      if (preservedPanel.shouldUpdate) {
+        Object.assign(updateData, preservedPanel.updateData)
+      }
+      this.setData(updateData)
+      return
     }
 
     const selectedGroupMarkers = this.getCurrentSelectedGroupMarkers(selectedMarkerId)
@@ -1144,6 +1064,89 @@ Page({
     this.setData(updateData)
   },
 
+  getPreservedClusterPanelState() {
+    const previousMarkers = this.data.selectedClusterMarkers || []
+    if (!previousMarkers.length) {
+      return null
+    }
+
+    const previousIds = previousMarkers.map(marker => marker.id)
+    const nextMarkers = previousIds
+      .map(markerId => this.businessMarkerById[markerId])
+      .filter(Boolean)
+
+    if (!nextMarkers.length) {
+      return {
+        shouldUpdate: true,
+        updateData: this.buildClosedClusterPanelData()
+      }
+    }
+
+    const sortedMarkers = this.sortMarkersForList(nextMarkers)
+    const selectedMarkerId = sortedMarkers.some(marker => marker.id === this.data.selectedMarkerId) ?
+      this.data.selectedMarkerId :
+      ''
+    const decoratedMarkers = this.withSelectedListItemClass(sortedMarkers, selectedMarkerId)
+    const nextGroupKey = this.getMarkerGroupKey(sortedMarkers)
+    const previousSignature = this.getMarkerListSignature(previousMarkers)
+    const nextSignature = this.getMarkerListSignature(decoratedMarkers)
+
+    if (
+      this.data.selectedClusterKey === nextGroupKey &&
+      previousSignature === nextSignature &&
+      this.data.selectedMarkerId === selectedMarkerId
+    ) {
+      return {
+        shouldUpdate: false
+      }
+    }
+
+    return {
+      shouldUpdate: true,
+      updateData: {
+        panelMode: 'cluster',
+        mapLocateButtonClass: this.getMapLocateButtonClass('cluster', this.data.clusterPanelExpanded),
+        clusterPanelBarTitle: '标记列表',
+        clusterPanelBarSubtitle: `${sortedMarkers.length} 条标记，点击列表查看详情`,
+        selectedClusterKey: nextGroupKey,
+        selectedClusterMarkers: decoratedMarkers,
+        selectedMarkerId,
+        selectedMarker: selectedMarkerId ?
+          decoratedMarkers.find(marker => marker.id === selectedMarkerId) :
+          null
+      }
+    }
+  },
+
+  buildClosedClusterPanelData() {
+    return {
+      panelMode: 'browse',
+      mapLocateButtonClass: this.getMapLocateButtonClass('browse'),
+      clusterPanelExpanded: true,
+      clusterPanelStateClass: 'is-expanded',
+      selectedClusterKey: '',
+      selectedClusterMarkers: [],
+      selectedMarkerId: '',
+      selectedMarker: null
+    }
+  },
+
+  getMarkerListSignature(markers) {
+    return (markers || [])
+      .map(marker => [
+        marker.id,
+        marker.category,
+        marker.title,
+        marker.description,
+        marker.latitude,
+        marker.longitude,
+        marker.score,
+        marker.voteValue,
+        marker.isMine
+      ].join(':'))
+      .join('|')
+  },
+
   createSpecialMarker(id, point, content, color, zIndex) {
     return {
       id,
@@ -1171,25 +1174,49 @@ Page({
   buildNativeMapMarkers(displayMarkers) {
     const mapMarkerIdToBusinessId = {}
     const businessMarkerById = {}
+    const iconStats = {}
+    const selectedMarkerId = this.data.selectedMarkerId
 
     const mapMarkers = displayMarkers.map(marker => {
       const mapMarkerId = this.getStableMapMarkerId(marker.id)
+      const categoryMeta = getCategoryMeta(marker.category)
+      const iconPath = categoryMeta.iconPath || MARKER_DOT_ICON
+      const isSelected = marker.id === selectedMarkerId
       mapMarkerIdToBusinessId[mapMarkerId] = marker.id
       businessMarkerById[marker.id] = marker
+      iconStats[marker.category || 'unknown'] = {
+        iconPath,
+        count: (iconStats[marker.category || 'unknown'] ? iconStats[marker.category || 'unknown'].count : 0) + 1
+      }
 
-      return {
+      const mapMarker = {
         id: mapMarkerId,
         latitude: marker.latitude,
         longitude: marker.longitude,
-        iconPath: MARKER_DOT_ICON,
-        width: 32,
-        height: 32,
-        joinCluster: true
+        iconPath,
+        width: isSelected ? SELECTED_CATEGORY_MARKER_SIZE : CATEGORY_MARKER_SIZE,
+        height: isSelected ? SELECTED_CATEGORY_MARKER_SIZE : CATEGORY_MARKER_SIZE,
+        joinCluster: !isSelected,
+        zIndex: isSelected ? 80 : 1
       }
+
+      return mapMarker
     })
 
     this.mapMarkerIdToBusinessId = mapMarkerIdToBusinessId
     this.businessMarkerById = businessMarkerById
+
+    this.debugMapLog('business markers built', {
+      count: mapMarkers.length,
+      iconStats,
+      sample: mapMarkers.slice(0, 5).map(marker => ({
+        id: marker.id,
+        iconPath: marker.iconPath,
+        latitude: marker.latitude,
+        longitude: marker.longitude,
+        joinCluster: marker.joinCluster
+      }))
+    })
 
     return mapMarkers
   },
@@ -1220,6 +1247,7 @@ Page({
       success: res => {
         this.debugMapLog('addMarkers success', {
           count: mapMarkers.length,
+          iconPaths: Array.from(new Set(mapMarkers.map(marker => marker.iconPath))),
           ids: mapMarkers.map(marker => marker.id),
           raw: res
         })
@@ -1233,6 +1261,21 @@ Page({
   getBusinessMarkerByMapId(mapMarkerId) {
     const businessMarkerId = this.mapMarkerIdToBusinessId[Number(mapMarkerId)]
     return businessMarkerId ? this.businessMarkerById[businessMarkerId] : null
+  },
+
+  refreshMapSelectionState() {
+    const displayMarkers = this.getDisplayMarkers()
+    const mapMarkers = this.buildNativeMapMarkers(displayMarkers)
+
+    if (this.data.highlightMarkerId) {
+      const highlightedMarker = displayMarkers.find(marker => marker.id === this.data.highlightMarkerId)
+      if (highlightedMarker) {
+        mapMarkers.push(this.createSpecialMarker(HIGHLIGHT_MARKER_ID, highlightedMarker, '新', '#0f766e', 95))
+      }
+    }
+
+    this.updateNativeMapMarkers(mapMarkers)
+    this.setData({ mapMarkers })
   },
 
   getMarkerIdsFromCluster(cluster) {
@@ -1401,7 +1444,11 @@ Page({
       updateData.selectedClusterMarkers = this.withSelectedListItemClass(this.data.selectedClusterMarkers, '')
     }
 
-    this.setData(updateData)
+    this.setData(updateData, () => {
+      if (expanded && options && options.clearDetail) {
+        this.refreshMapSelectionState()
+      }
+    })
   },
 
   showMarkerGroup(markers) {
@@ -1441,10 +1488,6 @@ Page({
   },
 
   getMapLocateButtonClass(panelMode, clusterPanelExpanded) {
-    if (panelMode === 'form') {
-      return 'map-locate-button is-above-form-panel'
-    }
-
     if (panelMode === 'cluster') {
       return clusterPanelExpanded === false ?
         'map-locate-button is-above-collapsed-panel' :
@@ -1487,6 +1530,11 @@ Page({
       timeText: formatTime(marker.createdAt),
       listItemClass: 'marker-list-item',
       isMine: !!marker.isMine,
+      images: (marker.images || [])
+        .map(image => Object.assign({}, image, {
+          fullUrl: getImageUrl(image)
+        }))
+        .filter(image => image.fullUrl),
       voteValue,
       isLiked: voteValue === 1,
       isDisliked: voteValue === -1,
@@ -1555,6 +1603,12 @@ Page({
       icon: 'none'
     })
     this.debugMapLog(fallbackTitle, error)
+  },
+
+  isBoundsTooLargeError(error) {
+    const message = error && error.message ? error.message : ''
+    return message.indexOf('地图视野范围过大') !== -1 ||
+      message.indexOf('搜索范围太大') !== -1
   },
 
   includePoint(point) {
