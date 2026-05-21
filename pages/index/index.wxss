@@ -963,6 +963,66 @@ page {
   box-shadow: 0 4rpx 0 0 var(--error-color-active);
 }
 
+/* --- 掉落与摇晃物理动画 --- */
+.drop-marker-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 999;
+  background: transparent;
+}
+
+.drop-marker-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  /* 调整中心点，使图片底部中心正好对准地图中心 */
+  transform: translate(-50%, -100%);
+  width: 88rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.drop-marker-icon {
+  width: 88rpx;
+  height: 88rpx;
+  transform-origin: bottom center;
+  animation: dropAndWobble 0.5s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+.drop-marker-shadow {
+  position: absolute;
+  bottom: -4rpx;
+  left: 50%;
+  width: 32rpx;
+  height: 8rpx;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 50%;
+  transform-origin: center;
+  animation: shadowGrow 0.5s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+@keyframes dropAndWobble {
+  0% { transform: translateY(-600rpx) scale(1, 1); opacity: 0; }
+  15% { transform: translateY(-400rpx) scale(0.9, 1.1); opacity: 1; }
+  40% { transform: translateY(0) scale(1.2, 0.8); }
+  55% { transform: translateY(0) scale(0.95, 1.05) rotate(-12deg); }
+  70% { transform: translateY(0) scale(1, 1) rotate(8deg); }
+  85% { transform: translateY(0) scale(1, 1) rotate(-4deg); }
+  100% { transform: translateY(0) scale(1, 1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes shadowGrow {
+  0% { transform: translateX(-50%) scale(0); opacity: 0; }
+  40% { transform: translateX(-50%) scale(1); opacity: 1; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
 .small-action-icon.danger:active, .small-action-icon.danger.btn-active {
   box-shadow: 0 2rpx 0 0 var(--error-color-active);
 }

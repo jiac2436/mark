@@ -294,6 +294,7 @@ Page({
       return this.uploadMarkerImages(marker.id).then(uploadResult => {
         wx.setStorageSync('map_mark_created_marker', {
           id: marker.id,
+          category: marker.category || this.data.form.category,
           latitude: Number(marker.latitude || point.latitude),
           longitude: Number(marker.longitude || point.longitude)
         })

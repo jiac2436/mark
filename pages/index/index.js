@@ -213,7 +213,9 @@ Page({
       selectedClusterMarkers: [],
       selectedMarkerId: '',
       selectedMarker: null,
-      highlightMarkerId: createdMarker.id
+      isDropAnimating: true,
+      animatingMarkerId: createdMarker.id,
+      dropMarkerIcon: getCategoryMeta(createdMarker.category).iconPath
     }, () => {
       this.refreshMarkersAfterViewChange({
         refreshOptions: {
@@ -221,7 +223,15 @@ Page({
         }
       }).then(() => {
         this.showMarkerGroupByBusinessIds([createdMarker.id])
-        this.startHighlightTimer()
+        
+        setTimeout(() => {
+          this.setData({
+            isDropAnimating: false,
+            animatingMarkerId: ''
+          }, () => {
+            this.refreshMapState()
+          })
+        }, 500)
       })
 
       this.scheduleMarkerRefresh({
@@ -1000,12 +1010,7 @@ Page({
     const displayMarkers = this.getDisplayMarkers()
     const mapMarkers = this.buildNativeMapMarkers(displayMarkers)
 
-    if (this.data.highlightMarkerId) {
-      const highlightedMarker = displayMarkers.find(marker => marker.id === this.data.highlightMarkerId)
-      if (highlightedMarker) {
-        mapMarkers.push(this.createSpecialMarker(HIGHLIGHT_MARKER_ID, highlightedMarker, '新', '#0f766e', 95))
-      }
-    }
+    // 移除了原有的 Highlight Marker 逻辑
 
     this.updateNativeMapMarkers(mapMarkers)
 
@@ -1206,7 +1211,8 @@ Page({
         width: isSelected ? SELECTED_CATEGORY_MARKER_SIZE : CATEGORY_MARKER_SIZE,
         height: isSelected ? SELECTED_CATEGORY_MARKER_SIZE : CATEGORY_MARKER_SIZE,
         joinCluster: !isSelected,
-        zIndex: isSelected ? 80 : 1
+        zIndex: isSelected ? 80 : 1,
+        alpha: (this.data.isDropAnimating && marker.id === this.data.animatingMarkerId) ? 0 : 1
       }
 
       return mapMarker
@@ -1254,12 +1260,7 @@ Page({
     const displayMarkers = this.getDisplayMarkers()
     const mapMarkers = this.buildNativeMapMarkers(displayMarkers)
 
-    if (this.data.highlightMarkerId) {
-      const highlightedMarker = displayMarkers.find(marker => marker.id === this.data.highlightMarkerId)
-      if (highlightedMarker) {
-        mapMarkers.push(this.createSpecialMarker(HIGHLIGHT_MARKER_ID, highlightedMarker, '新', '#0f766e', 95))
-      }
-    }
+    // 移除了原有的 Highlight Marker 逻辑
 
     this.updateNativeMapMarkers(mapMarkers)
     this.setData({ mapMarkers })
@@ -1615,23 +1616,7 @@ Page({
     }))
   },
 
-  startHighlightTimer() {
-    this.clearHighlightTimer()
-    this.highlightTimer = setTimeout(() => {
-      this.setData({
-        highlightMarkerId: ''
-      }, () => {
-        this.refreshMapState()
-      })
-    }, NEW_MARKER_HIGHLIGHT_MS)
-  },
-
-  clearHighlightTimer() {
-    if (this.highlightTimer) {
-      clearTimeout(this.highlightTimer)
-      this.highlightTimer = null
-    }
-  },
+  noop() {},
 
   clearMapTapTimer() {
     if (this.pendingMapTapTimer) {

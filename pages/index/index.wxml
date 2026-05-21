@@ -60,6 +60,13 @@
           </cover-view>
         </cover-view>
       </cover-view>
+
+      <view class="drop-marker-mask" wx:if="{{isDropAnimating}}" catchtouchmove="noop">
+        <view class="drop-marker-container">
+          <image class="drop-marker-icon" src="{{dropMarkerIcon}}" />
+          <view class="drop-marker-shadow"></view>
+        </view>
+      </view>
     </map>
   </view>
 
