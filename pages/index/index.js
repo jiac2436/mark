@@ -132,9 +132,19 @@ function hasValidCoordinate(marker) {
 }
 
 function buildMapFilterCategories(activeCategory) {
-  return MARK_CATEGORIES.map(item => Object.assign({}, item, {
+  const categories = MARK_CATEGORIES.map(item => Object.assign({}, item, {
     selectedClass: item.value === activeCategory ? 'is-selected' : ''
   }))
+
+  if (activeCategory !== 'all') {
+    const activeIndex = categories.findIndex(item => item.value === activeCategory)
+    if (activeIndex > -1) {
+      const activeItem = categories.splice(activeIndex, 1)[0]
+      categories.unshift(activeItem)
+    }
+  }
+
+  return categories
 }
 
 Page({
@@ -203,7 +213,9 @@ Page({
       selectedClusterMarkers: [],
       selectedMarkerId: '',
       selectedMarker: null,
-      highlightMarkerId: createdMarker.id
+      isDropAnimating: true,
+      animatingMarkerId: createdMarker.id,
+      dropMarkerIcon: getCategoryMeta(createdMarker.category).iconPath
     }, () => {
       this.refreshMarkersAfterViewChange({
         refreshOptions: {
@@ -211,7 +223,15 @@ Page({
         }
       }).then(() => {
         this.showMarkerGroupByBusinessIds([createdMarker.id])
-        this.startHighlightTimer()
+        
+        setTimeout(() => {
+          this.setData({
+            isDropAnimating: false,
+            animatingMarkerId: ''
+          }, () => {
+            this.refreshMapState()
+          })
+        }, 500)
       })
 
       this.scheduleMarkerRefresh({
@@ -514,10 +534,6 @@ Page({
   },
 
   onMapFilterIconTap() {
-    if (this.data.activeCategory !== 'all') {
-      return
-    }
-
     this.setData({
       isMapFilterExpanded: !this.data.isMapFilterExpanded
     })
@@ -765,6 +781,9 @@ Page({
 
   onMarkerListItemLongPress(e) {
     const markerId = e.currentTarget.dataset.id
+    if (this.data.selectedMarkerId !== markerId) {
+      return
+    }
     this.setData({
       longPressedMarkerId: markerId
     })
@@ -991,12 +1010,7 @@ Page({
     const displayMarkers = this.getDisplayMarkers()
     const mapMarkers = this.buildNativeMapMarkers(displayMarkers)
 
-    if (this.data.highlightMarkerId) {
-      const highlightedMarker = displayMarkers.find(marker => marker.id === this.data.highlightMarkerId)
-      if (highlightedMarker) {
-        mapMarkers.push(this.createSpecialMarker(HIGHLIGHT_MARKER_ID, highlightedMarker, '新', '#0f766e', 95))
-      }
-    }
+    // 移除了原有的 Highlight Marker 逻辑
 
     this.updateNativeMapMarkers(mapMarkers)
 
@@ -1197,7 +1211,8 @@ Page({
         width: isSelected ? SELECTED_CATEGORY_MARKER_SIZE : CATEGORY_MARKER_SIZE,
         height: isSelected ? SELECTED_CATEGORY_MARKER_SIZE : CATEGORY_MARKER_SIZE,
         joinCluster: !isSelected,
-        zIndex: isSelected ? 80 : 1
+        zIndex: isSelected ? 80 : 1,
+        alpha: (this.data.isDropAnimating && marker.id === this.data.animatingMarkerId) ? 0 : 1
       }
 
       return mapMarker
@@ -1231,31 +1246,9 @@ Page({
   },
 
   updateNativeMapMarkers(mapMarkers) {
-    if (!this.mapCtx || !this.mapCtx.addMarkers) {
-      this.debugMapLog('addMarkers fallback setData', {
-        count: mapMarkers.length
-      })
-      this.setData({
-        mapMarkers
-      })
-      return
-    }
-
-    this.mapCtx.addMarkers({
-      clear: true,
-      markers: mapMarkers,
-      success: res => {
-        this.debugMapLog('addMarkers success', {
-          count: mapMarkers.length,
-          iconPaths: Array.from(new Set(mapMarkers.map(marker => marker.iconPath))),
-          ids: mapMarkers.map(marker => marker.id),
-          raw: res
-        })
-      },
-      fail: err => {
-        this.debugMapLog('addMarkers fail', err)
-      }
-    })
+    // 微信小程序的 mapCtx.addMarkers({ clear: true }) 会导致原生标记点全部销毁重绘，从而产生闪烁。
+    // 现在完全依赖外部的 this.setData({ mapMarkers }) 让微信底层自带有状态 diff 去更新标记点。
+    // 由于外部调用方（如 refreshMapState 和 refreshMapSelectionState）均会将 mapMarkers 合并到 setData 中，此处无需重复操作。
   },
 
   getBusinessMarkerByMapId(mapMarkerId) {
@@ -1267,12 +1260,7 @@ Page({
     const displayMarkers = this.getDisplayMarkers()
     const mapMarkers = this.buildNativeMapMarkers(displayMarkers)
 
-    if (this.data.highlightMarkerId) {
-      const highlightedMarker = displayMarkers.find(marker => marker.id === this.data.highlightMarkerId)
-      if (highlightedMarker) {
-        mapMarkers.push(this.createSpecialMarker(HIGHLIGHT_MARKER_ID, highlightedMarker, '新', '#0f766e', 95))
-      }
-    }
+    // 移除了原有的 Highlight Marker 逻辑
 
     this.updateNativeMapMarkers(mapMarkers)
     this.setData({ mapMarkers })
@@ -1624,27 +1612,11 @@ Page({
 
   withSelectedListItemClass(markers, selectedMarkerId) {
     return markers.map(marker => Object.assign({}, marker, {
-      listItemClass: marker.id === selectedMarkerId ? 'marker-list-item is-selected' : 'marker-list-item'
+      listItemClass: marker.id === selectedMarkerId ? `marker-list-item is-selected is-selected-${marker.category}` : 'marker-list-item'
     }))
   },
 
-  startHighlightTimer() {
-    this.clearHighlightTimer()
-    this.highlightTimer = setTimeout(() => {
-      this.setData({
-        highlightMarkerId: ''
-      }, () => {
-        this.refreshMapState()
-      })
-    }, NEW_MARKER_HIGHLIGHT_MS)
-  },
-
-  clearHighlightTimer() {
-    if (this.highlightTimer) {
-      clearTimeout(this.highlightTimer)
-      this.highlightTimer = null
-    }
-  },
+  noop() {},
 
   clearMapTapTimer() {
     if (this.pendingMapTapTimer) {

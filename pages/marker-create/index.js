@@ -65,7 +65,9 @@ Page({
     images: [],
     isSubmitting: false,
     compressCanvasWidth: IMAGE_MAX_SIZE,
-    compressCanvasHeight: IMAGE_MAX_SIZE
+    compressCanvasHeight: IMAGE_MAX_SIZE,
+    titleFocused: false,
+    descriptionFocused: false
   },
 
   onLoad(options) {
@@ -112,10 +114,26 @@ Page({
     })
   },
 
+  onTitleFocus() {
+    this.setData({ titleFocused: true })
+  },
+
+  onTitleBlur() {
+    this.setData({ titleFocused: false })
+  },
+
   onDescriptionInput(e) {
     this.setData({
       'form.description': e.detail.value
     })
+  },
+
+  onDescriptionFocus() {
+    this.setData({ descriptionFocused: true })
+  },
+
+  onDescriptionBlur() {
+    this.setData({ descriptionFocused: false })
   },
 
   onChooseImagesTap() {
@@ -276,6 +294,7 @@ Page({
       return this.uploadMarkerImages(marker.id).then(uploadResult => {
         wx.setStorageSync('map_mark_created_marker', {
           id: marker.id,
+          category: marker.category || this.data.form.category,
           latitude: Number(marker.latitude || point.latitude),
           longitude: Number(marker.longitude || point.longitude)
         })
