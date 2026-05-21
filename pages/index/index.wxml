@@ -1,5 +1,5 @@
 <view class="page">
-  <view class="header">
+  <view wx:if="{{false}}" class="header">
     <text class="location-status">{{locationLabel}}</text>
     <view class="header-actions">
       <button class="icon-button" bindtap="onSearchTap">搜索</button>
@@ -8,21 +8,7 @@
     </view>
   </view>
 
-  <scroll-view wx:if="{{showCategoryBar}}" class="category-scroll" scroll-x show-scrollbar="{{false}}">
-    <view class="category-list">
-      <view
-        wx:for="{{filterCategories}}"
-        wx:key="value"
-        class="category-chip {{item.activeClass}}"
-        data-category="{{item.value}}"
-        bindtap="onCategoryTap"
-      >
-        {{item.label}}
-      </view>
-    </view>
-  </scroll-view>
-
-  <view wx:if="{{showPermissionStrip}}" class="permission-strip">
+  <view wx:if="{{false && showPermissionStrip}}" class="permission-strip">
     <text>浏览模式：可查看和搜索，开启定位后可创建和评价。</text>
     <button class="text-button" bindtap="onOpenSettingTap">开启定位</button>
   </view>
@@ -38,95 +24,132 @@
       show-location="{{hasLocationAuth}}"
       bindmarkertap="onMarkerTap"
       bindlabeltap="onMarkerTap"
+      bindcallouttap="onMarkerTap"
+      bindregionchange="onMapRegionChange"
       bindtap="onMapTap"
-    />
+    >
+      <view class="map-filter">
+        <view class="map-filter-icon" catchtap="onMapFilterIconTap">🏷️</view>
+        <scroll-view 
+          class="map-filter-list {{isMapFilterExpanded ? 'is-expanded' : (activeCategory !== 'all' ? 'is-collapsed-active' : 'is-hidden')}}"
+          scroll-x="{{isMapFilterExpanded}}"
+          enable-flex="{{true}}"
+          show-scrollbar="{{false}}"
+        >
+          <block wx:for="{{mapFilterCategories}}" wx:key="value">
+            <view
+              class="map-filter-chip category-chip-{{item.value}} {{item.selectedClass}} {{!isMapFilterExpanded && index > 0 ? 'is-chip-hidden' : ''}}"
+              hover-class="chip-active"
+              data-category="{{item.value}}"
+              catchtap="onMapFilterCategoryTap"
+            >{{item.label}}</view>
+          </block>
+        </scroll-view>
+      </view>
+      <cover-view class="map-create-button" hover-class="btn-active" catchtap="onCreateMarkerEntryTap">
+        <cover-view class="create-icon-halo">
+          <cover-view class="create-icon-plus">+</cover-view>
+        </cover-view>
+      </cover-view>
+      <cover-view class="{{mapLocateButtonClass}}" hover-class="btn-active" bindtap="onLocateTap">
+        <cover-view class="map-locate-radar">
+          <cover-view class="radar-outer-ring">
+            <cover-view class="radar-halo">
+              <cover-view class="radar-dot"></cover-view>
+            </cover-view>
+          </cover-view>
+        </cover-view>
+      </cover-view>
+
+      <view class="drop-marker-mask" wx:if="{{isDropAnimating}}" catchtouchmove="noop">
+        <view class="drop-marker-container">
+          <image class="drop-marker-icon" src="{{dropMarkerIcon}}" />
+          <view class="drop-marker-shadow"></view>
+        </view>
+      </view>
+    </map>
   </view>
 
-  <view class="panel">
-    <block wx:if="{{panelMode === 'form'}}">
-      <view class="panel-head">
-        <view>
-          <text class="panel-title">创建标记</text>
-          <text class="panel-subtitle">{{pendingPoint.name}} · {{pendingPoint.latitudeText}}, {{pendingPoint.longitudeText}}</text>
-        </view>
-      </view>
-      <view class="form-section">
-        <view class="field-label">分类</view>
-        <view class="form-category-list">
-          <view
-            wx:for="{{markCategories}}"
-            wx:key="value"
-            class="form-category {{item.selectedClass}}"
-            data-category="{{item.value}}"
-            bindtap="onFormCategoryTap"
-          >
-            {{item.label}}
-          </view>
-        </view>
-        <view class="field-label">标题</view>
-        <input class="text-input" value="{{form.title}}" maxlength="24" placeholder="可不填" bindinput="onTitleInput" />
-        <view class="field-label">描述</view>
-        <textarea class="textarea-input" value="{{form.description}}" maxlength="120" placeholder="可不填" bindinput="onDescriptionInput" />
-      </view>
-      <view class="panel-actions">
-        <button class="secondary-button" bindtap="onCancelCreateTap">取消</button>
-        <button class="primary-button" bindtap="onSaveMarkerTap">保存标记</button>
-      </view>
-    </block>
-
-    <block wx:elif="{{panelMode === 'cluster'}}">
-      <view class="panel-head">
-        <view>
-          <text wx:if="{{selectedClusterMarkers.length === 1}}" class="panel-title">标记详情</text>
-          <text wx:else class="panel-title">区域标记</text>
-          <text wx:if="{{selectedClusterMarkers.length === 1 && selectedMarker}}" class="panel-subtitle">{{selectedMarker.categoryLabel}} · 分 {{selectedMarker.displayScore}} · {{selectedMarker.timeText}}</text>
-          <text wx:else class="panel-subtitle">{{selectedClusterMarkers.length}} 条标记，点击列表查看详情</text>
-        </view>
-        <text class="cluster-count">{{activeCategoryLabel}}</text>
+  <view wx:if="{{panelMode !== 'browse'}}" class="panel">
+    <block wx:if="{{panelMode === 'cluster'}}">
+      <view
+        class="cluster-panel-drag-area"
+        bindtouchstart="onClusterPanelBarTouchStart"
+        bindtouchend="onClusterPanelBarTouchEnd"
+      >
+        <view class="drag-pill"></view>
       </view>
 
-      <scroll-view wx:if="{{selectedClusterMarkers.length > 1}}" class="marker-list-scroll" scroll-y show-scrollbar="{{false}}">
-        <view class="marker-list">
-          <view
-            wx:for="{{selectedClusterMarkers}}"
-            wx:key="id"
-            class="{{item.listItemClass}}"
-            data-id="{{item.id}}"
-            bindtap="onMarkerListItemTap"
-          >
-            <view class="list-item-main">
-              <view class="card-row">
-                <text class="{{item.categoryClass}}">{{item.categoryLabel}}</text>
-                <text wx:if="{{item.isMine}}" class="mine-badge">我</text>
+      <view class="cluster-panel-body {{clusterPanelStateClass}}">
+        <scroll-view wx:if="{{selectedClusterMarkers.length}}" class="marker-list-scroll" scroll-x show-scrollbar="{{false}}" bindscroll="onMarkerListScroll">
+          <view class="marker-list">
+            <view
+              wx:for="{{selectedClusterMarkers}}"
+              wx:key="id"
+              class="{{item.listItemClass}}"
+              data-id="{{item.id}}"
+              bindtap="onMarkerListItemTap"
+              bindlongpress="onMarkerListItemLongPress"
+            >
+              <view class="list-item-content">
+                <view class="list-item-main">
+                  <view class="card-row">
+                    <view class="card-tags">
+                      <text class="{{item.categoryClass}}">{{item.categoryLabel}}</text>
+                      <text wx:if="{{item.isMine}}" class="mine-badge">我</text>
+                    </view>
+                    <view class="card-score-badge">
+                      <text class="score-label">有用</text>
+                      <text class="score-num">{{item.displayScore}}</text>
+                    </view>
+                  </view>
+                  <text class="card-title">{{item.displayTitle}}</text>
+                  <text class="card-desc">{{item.displayDescription}}</text>
+                  <scroll-view wx:if="{{item.images.length}}" class="card-image-scroll" scroll-x show-scrollbar="{{false}}">
+                    <view class="card-image-list">
+                      <image
+                        wx:for="{{item.images}}"
+                        wx:key="id"
+                        class="card-image"
+                        src="{{item.fullUrl}}"
+                        mode="aspectFill"
+                        data-id="{{item.id}}"
+                        data-url="{{item.fullUrl}}"
+                        catchtap="onPreviewMarkerImageTap"
+                      />
+                    </view>
+                  </scroll-view>
+                  <view class="card-bottom">
+                    <text class="card-time">{{item.timeText}}</text>
+                    <view class="card-actions">
+                      <view wx:if="{{selectedMarkerId === item.id}}" class="small-action-icon" hover-class="btn-active" data-id="{{item.id}}" catchtap="onNavigateMarkerTap">
+                        <text>🧭</text>
+                      </view>
+                      <view wx:if="{{selectedMarkerId === item.id && item.isMine}}" class="small-action-icon danger" hover-class="btn-active" data-id="{{item.id}}" catchtap="onDeleteMarkerTap">
+                        <text>🗑</text>
+                      </view>
+                    </view>
+                  </view>
+                </view>
               </view>
-              <text class="card-title">{{item.displayTitle}}</text>
-              <text class="card-desc">{{item.displayDescription}}</text>
-              <view class="card-meta">
-                <text>分 {{item.displayScore}}</text>
-                <text>{{item.timeText}}</text>
+              
+              <!-- Long press mask -->
+              <view wx:if="{{longPressedMarkerId === item.id}}" class="card-mask" catchtap="onMaskTap">
+                <view class="mask-btn-group">
+                  <view class="mask-btn {{item.isLiked ? 'is-active' : ''}} {{animatingVoteValue === 1 ? 'vote-animate' : ''}}" hover-class="vote-active" data-id="{{item.id}}" data-vote="1" catchtap="onVoteTap">
+                    <text class="mask-icon">👍</text>
+                  </view>
+                  <view class="mask-sep"></view>
+                  <view class="mask-btn {{item.isDisliked ? 'is-active' : ''}} {{animatingVoteValue === -1 ? 'vote-animate' : ''}}" hover-class="vote-active" data-id="{{item.id}}" data-vote="-1" catchtap="onVoteTap">
+                    <text class="mask-icon">👎</text>
+                  </view>
+                </view>
               </view>
             </view>
-            <text class="list-item-arrow">›</text>
           </view>
-        </view>
-      </scroll-view>
+        </scroll-view>
 
-      <view wx:if="{{selectedMarker}}" class="detail">
-        <view class="detail-main">
-          <text class="detail-title">{{selectedMarker.displayTitle}}</text>
-          <text class="detail-desc">{{selectedMarker.displayDescription}}</text>
-          <view class="detail-meta">
-            <text>{{selectedMarker.categoryLabel}}</text>
-            <text>分 {{selectedMarker.displayScore}}</text>
-            <text>{{selectedMarker.timeText}}</text>
-          </view>
-        </view>
-        <view class="detail-actions">
-          <button class="{{selectedMarker.likeButtonClass}}" data-vote="1" catchtap="onVoteTap">赞</button>
-          <button class="{{selectedMarker.dislikeButtonClass}}" data-vote="-1" catchtap="onVoteTap">踩</button>
-          <button wx:if="{{selectedMarker.isMine}}" class="danger-button" catchtap="onDeleteMarkerTap">删除</button>
-          <button wx:else class="secondary-button compact" catchtap="onReportTap">举报</button>
-        </view>
+
       </view>
     </block>
 
