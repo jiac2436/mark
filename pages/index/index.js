@@ -132,9 +132,19 @@ function hasValidCoordinate(marker) {
 }
 
 function buildMapFilterCategories(activeCategory) {
-  return MARK_CATEGORIES.map(item => Object.assign({}, item, {
+  const categories = MARK_CATEGORIES.map(item => Object.assign({}, item, {
     selectedClass: item.value === activeCategory ? 'is-selected' : ''
   }))
+
+  if (activeCategory !== 'all') {
+    const activeIndex = categories.findIndex(item => item.value === activeCategory)
+    if (activeIndex > -1) {
+      const activeItem = categories.splice(activeIndex, 1)[0]
+      categories.unshift(activeItem)
+    }
+  }
+
+  return categories
 }
 
 Page({
@@ -514,10 +524,6 @@ Page({
   },
 
   onMapFilterIconTap() {
-    if (this.data.activeCategory !== 'all') {
-      return
-    }
-
     this.setData({
       isMapFilterExpanded: !this.data.isMapFilterExpanded
     })
@@ -765,6 +771,9 @@ Page({
 
   onMarkerListItemLongPress(e) {
     const markerId = e.currentTarget.dataset.id
+    if (this.data.selectedMarkerId !== markerId) {
+      return
+    }
     this.setData({
       longPressedMarkerId: markerId
     })
@@ -1231,31 +1240,9 @@ Page({
   },
 
   updateNativeMapMarkers(mapMarkers) {
-    if (!this.mapCtx || !this.mapCtx.addMarkers) {
-      this.debugMapLog('addMarkers fallback setData', {
-        count: mapMarkers.length
-      })
-      this.setData({
-        mapMarkers
-      })
-      return
-    }
-
-    this.mapCtx.addMarkers({
-      clear: true,
-      markers: mapMarkers,
-      success: res => {
-        this.debugMapLog('addMarkers success', {
-          count: mapMarkers.length,
-          iconPaths: Array.from(new Set(mapMarkers.map(marker => marker.iconPath))),
-          ids: mapMarkers.map(marker => marker.id),
-          raw: res
-        })
-      },
-      fail: err => {
-        this.debugMapLog('addMarkers fail', err)
-      }
-    })
+    // 微信小程序的 mapCtx.addMarkers({ clear: true }) 会导致原生标记点全部销毁重绘，从而产生闪烁。
+    // 现在完全依赖外部的 this.setData({ mapMarkers }) 让微信底层自带有状态 diff 去更新标记点。
+    // 由于外部调用方（如 refreshMapState 和 refreshMapSelectionState）均会将 mapMarkers 合并到 setData 中，此处无需重复操作。
   },
 
   getBusinessMarkerByMapId(mapMarkerId) {
@@ -1624,7 +1611,7 @@ Page({
 
   withSelectedListItemClass(markers, selectedMarkerId) {
     return markers.map(marker => Object.assign({}, marker, {
-      listItemClass: marker.id === selectedMarkerId ? 'marker-list-item is-selected' : 'marker-list-item'
+      listItemClass: marker.id === selectedMarkerId ? `marker-list-item is-selected is-selected-${marker.category}` : 'marker-list-item'
     }))
   },
 

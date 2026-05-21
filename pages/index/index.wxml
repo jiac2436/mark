@@ -28,24 +28,37 @@
       bindregionchange="onMapRegionChange"
       bindtap="onMapTap"
     >
-      <cover-view class="map-filter">
-        <cover-view class="map-filter-icon" catchtap="onMapFilterIconTap">🏷️</cover-view>
-        <cover-view wx:if="{{isMapFilterExpanded || activeCategory !== 'all'}}" class="map-filter-list">
+      <view class="map-filter">
+        <view class="map-filter-icon" catchtap="onMapFilterIconTap">🏷️</view>
+        <scroll-view 
+          class="map-filter-list {{isMapFilterExpanded ? 'is-expanded' : (activeCategory !== 'all' ? 'is-collapsed-active' : 'is-hidden')}}"
+          scroll-x="{{isMapFilterExpanded}}"
+          enable-flex="{{true}}"
+          show-scrollbar="{{false}}"
+        >
           <block wx:for="{{mapFilterCategories}}" wx:key="value">
-            <cover-view
-              wx:if="{{isMapFilterExpanded || item.value === activeCategory}}"
-              class="map-filter-chip {{item.selectedClass}}"
+            <view
+              class="map-filter-chip category-chip-{{item.value}} {{item.selectedClass}} {{!isMapFilterExpanded && index > 0 ? 'is-chip-hidden' : ''}}"
+              hover-class="chip-active"
               data-category="{{item.value}}"
               catchtap="onMapFilterCategoryTap"
-            >
-              {{item.label}}
-            </cover-view>
+            >{{item.label}}</view>
           </block>
+        </scroll-view>
+      </view>
+      <cover-view class="map-create-button" hover-class="btn-active" catchtap="onCreateMarkerEntryTap">
+        <cover-view class="create-icon-halo">
+          <cover-view class="create-icon-plus">+</cover-view>
         </cover-view>
       </cover-view>
-      <cover-view class="map-create-button" catchtap="onCreateMarkerEntryTap">+</cover-view>
-      <cover-view class="{{mapLocateButtonClass}}" bindtap="onLocateTap">
-        <cover-view class="map-locate-dot"></cover-view>
+      <cover-view class="{{mapLocateButtonClass}}" hover-class="btn-active" bindtap="onLocateTap">
+        <cover-view class="map-locate-radar">
+          <cover-view class="radar-outer-ring">
+            <cover-view class="radar-halo">
+              <cover-view class="radar-dot"></cover-view>
+            </cover-view>
+          </cover-view>
+        </cover-view>
       </cover-view>
     </map>
   </view>
@@ -102,10 +115,10 @@
                   <view class="card-bottom">
                     <text class="card-time">{{item.timeText}}</text>
                     <view class="card-actions">
-                      <view wx:if="{{selectedMarkerId === item.id}}" class="small-action-icon" data-id="{{item.id}}" catchtap="onNavigateMarkerTap">
+                      <view wx:if="{{selectedMarkerId === item.id}}" class="small-action-icon" hover-class="btn-active" data-id="{{item.id}}" catchtap="onNavigateMarkerTap">
                         <text>🧭</text>
                       </view>
-                      <view wx:if="{{selectedMarkerId === item.id && item.isMine}}" class="small-action-icon danger" data-id="{{item.id}}" catchtap="onDeleteMarkerTap">
+                      <view wx:if="{{selectedMarkerId === item.id && item.isMine}}" class="small-action-icon danger" hover-class="btn-active" data-id="{{item.id}}" catchtap="onDeleteMarkerTap">
                         <text>🗑</text>
                       </view>
                     </view>
@@ -116,11 +129,11 @@
               <!-- Long press mask -->
               <view wx:if="{{longPressedMarkerId === item.id}}" class="card-mask" catchtap="onMaskTap">
                 <view class="mask-btn-group">
-                  <view class="mask-btn {{item.isLiked ? 'is-active' : ''}} {{animatingVoteValue === 1 ? 'vote-animate' : ''}}" data-id="{{item.id}}" data-vote="1" catchtap="onVoteTap">
+                  <view class="mask-btn {{item.isLiked ? 'is-active' : ''}} {{animatingVoteValue === 1 ? 'vote-animate' : ''}}" hover-class="vote-active" data-id="{{item.id}}" data-vote="1" catchtap="onVoteTap">
                     <text class="mask-icon">👍</text>
                   </view>
                   <view class="mask-sep"></view>
-                  <view class="mask-btn {{item.isDisliked ? 'is-active' : ''}} {{animatingVoteValue === -1 ? 'vote-animate' : ''}}" data-id="{{item.id}}" data-vote="-1" catchtap="onVoteTap">
+                  <view class="mask-btn {{item.isDisliked ? 'is-active' : ''}} {{animatingVoteValue === -1 ? 'vote-animate' : ''}}" hover-class="vote-active" data-id="{{item.id}}" data-vote="-1" catchtap="onVoteTap">
                     <text class="mask-icon">👎</text>
                   </view>
                 </view>

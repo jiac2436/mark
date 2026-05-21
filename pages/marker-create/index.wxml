@@ -1,27 +1,26 @@
-<view class="page">
+<view class="page theme-{{form.category}}">
   <view class="section">
     <text class="section-title">标签</text>
     <view class="category-grid">
       <view
         wx:for="{{categories}}"
         wx:key="value"
-        class="category-item {{item.selectedClass}}"
+        class="category-item category-item-{{item.value}} {{item.selectedClass}}"
+        hover-class="chip-active"
         data-category="{{item.value}}"
         bindtap="onCategoryTap"
-      >
-        {{item.label}}
-      </view>
+      >{{item.label}}</view>
     </view>
   </view>
 
   <view class="section">
     <text class="section-title">标题</text>
-    <input class="title-input" value="{{form.title}}" maxlength="10" placeholder="可不填，最多10个字" bindinput="onTitleInput" />
+    <input class="title-input {{titleFocused ? 'is-focused' : ''}}" value="{{form.title}}" maxlength="10" placeholder="可不填，最多10个字" bindinput="onTitleInput" bindfocus="onTitleFocus" bindblur="onTitleBlur" />
   </view>
 
   <view class="section">
     <text class="section-title">描述</text>
-    <textarea class="desc-input" value="{{form.description}}" maxlength="30" placeholder="可不填，最多30个字" bindinput="onDescriptionInput" />
+    <textarea class="desc-input {{descriptionFocused ? 'is-focused' : ''}}" value="{{form.description}}" maxlength="30" placeholder="可不填，最多30个字" bindinput="onDescriptionInput" bindfocus="onDescriptionFocus" bindblur="onDescriptionBlur" />
   </view>
 
   <view class="section">
@@ -35,7 +34,7 @@
         <image class="image-preview" src="{{item.path}}" mode="aspectFill" />
         <view class="image-remove" data-index="{{index}}" bindtap="onRemoveImageTap">×</view>
       </view>
-      <view wx:if="{{images.length < 5}}" class="image-add" bindtap="onChooseImagesTap">
+      <view wx:if="{{images.length < 5}}" class="image-add" hover-class="btn-active" bindtap="onChooseImagesTap">
         <text class="image-add-plus">+</text>
         <text class="image-add-text">上传</text>
       </view>
@@ -65,8 +64,8 @@
   </view>
 
   <view class="footer">
-    <button class="secondary-button" bindtap="onCancelTap">取消</button>
-    <button class="primary-button" loading="{{isSubmitting}}" disabled="{{isSubmitting}}" bindtap="onSubmitTap">确认</button>
+    <button class="btn-3d btn-3d-secondary secondary-button" hover-class="btn-active" bindtap="onCancelTap">取消</button>
+    <button class="btn-3d btn-3d-primary primary-button" hover-class="btn-active" loading="{{isSubmitting}}" disabled="{{isSubmitting}}" bindtap="onSubmitTap">确认</button>
   </view>
 
   <canvas
