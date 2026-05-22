@@ -7,6 +7,7 @@ const FALLBACK_CENTER = {
 }
 
 const DEFAULT_SCALE = 17
+const SELECTED_MARKER_MIN_SCALE = 15
 const NATIVE_CLUSTER_GRID_SIZE = 48
 const MARKER_TAP_FALLBACK_RADIUS_PX = 72
 const MAP_TAP_FALLBACK_DELAY_MS = 120
@@ -266,14 +267,11 @@ Page({
         const latitude = res.latitude
         const longitude = res.longitude
         const updateData = {
+          latitude,
+          longitude,
           hasLocationAuth: true,
           locationLabel: '已定位到当前位置',
           showPermissionStrip: false
-        }
-
-        if (showFeedback) {
-          updateData.latitude = latitude
-          updateData.longitude = longitude
         }
 
         this.setData(updateData, () => {
@@ -284,6 +282,12 @@ Page({
                 clearSelection: true
               }
             })
+            return
+          }
+
+          this.loadInitialMarkersOnce()
+          if (this.mapCtx) {
+            this.moveToCurrentLocation()
           }
         })
 
@@ -660,12 +664,15 @@ Page({
     }
 
     if (markerId === SELECTED_MARKER_ID && this.data.selectedMarkerId) {
-      this.showMarkerGroupByBusinessIds([this.data.selectedMarkerId])
+      this.selectMarkerDetail(this.data.selectedMarkerId)
       return
     }
 
     if (businessMarker) {
-      this.showMarkerGroup([businessMarker])
+      this.showMarkerGroup([businessMarker], {
+        selectedMarkerId: businessMarker.id,
+        focusSelectedMarker: true
+      })
     }
   },
 
@@ -774,13 +781,31 @@ Page({
 
     const selectedClusterMarkers = this.withSelectedListItemClass(this.data.selectedClusterMarkers, markerId)
 
-    this.setData({
-      latitude: marker.latitude,
-      longitude: marker.longitude,
+    this.selectMarkerDetail(markerId, marker, selectedClusterMarkers)
+  },
+
+  selectMarkerDetail(markerId, marker, selectedClusterMarkers) {
+    const targetMarker = marker || this.data.selectedClusterMarkers.find(item => item.id === markerId) || this.businessMarkerById[markerId]
+    if (!targetMarker) {
+      return
+    }
+
+    const decoratedMarkers = selectedClusterMarkers || this.withSelectedListItemClass(this.data.selectedClusterMarkers, markerId)
+    const currentScale = Number(this.currentMapScale || this.data.scale || DEFAULT_SCALE)
+    const updateData = {
+      latitude: targetMarker.latitude,
+      longitude: targetMarker.longitude,
       selectedMarkerId: markerId,
-      selectedMarker: selectedClusterMarkers.find(item => item.id === markerId),
-      selectedClusterMarkers
-    }, () => {
+      selectedMarker: decoratedMarkers.find(item => item.id === markerId) || targetMarker,
+      selectedClusterMarkers: decoratedMarkers
+    }
+
+    if (currentScale < SELECTED_MARKER_MIN_SCALE) {
+      updateData.scale = SELECTED_MARKER_MIN_SCALE
+      this.currentMapScale = SELECTED_MARKER_MIN_SCALE
+    }
+
+    this.setData(updateData, () => {
       this.refreshMapSelectionState()
     })
   },
@@ -1464,13 +1489,16 @@ Page({
     })
   },
 
-  showMarkerGroup(markers) {
+  showMarkerGroup(markers, options) {
+    const opts = options || {}
     const sortedMarkers = this.sortMarkersForList(markers)
     const nextGroupKey = this.getMarkerGroupKey(sortedMarkers)
+    const initialSelectedMarkerId = opts.selectedMarkerId || ''
 
     if (
       this.data.panelMode === 'cluster' &&
-      this.data.selectedClusterKey === nextGroupKey
+      this.data.selectedClusterKey === nextGroupKey &&
+      (!initialSelectedMarkerId || this.data.selectedMarkerId === initialSelectedMarkerId)
     ) {
       return
     }
@@ -1478,8 +1506,11 @@ Page({
     const barSubtitle = sortedMarkers.length ?
       `${sortedMarkers.length} 条标记，点击列表查看详情` :
       ''
-
-    this.setData({
+    const decoratedMarkers = this.withSelectedListItemClass(sortedMarkers, initialSelectedMarkerId)
+    const selectedMarker = initialSelectedMarkerId ?
+      decoratedMarkers.find(marker => marker.id === initialSelectedMarkerId) :
+      null
+    const updateData = {
       panelMode: 'cluster',
       mapLocateButtonClass: this.getMapLocateButtonClass('cluster', true),
       clusterPanelExpanded: true,
@@ -1487,9 +1518,25 @@ Page({
       clusterPanelBarTitle: '标记列表',
       clusterPanelBarSubtitle: barSubtitle,
       selectedClusterKey: nextGroupKey,
-      selectedClusterMarkers: this.withSelectedListItemClass(sortedMarkers, ''),
-      selectedMarkerId: '',
-      selectedMarker: null
+      selectedClusterMarkers: decoratedMarkers,
+      selectedMarkerId: initialSelectedMarkerId,
+      selectedMarker
+    }
+
+    if (opts.focusSelectedMarker && selectedMarker) {
+      const currentScale = Number(this.currentMapScale || this.data.scale || DEFAULT_SCALE)
+      updateData.latitude = selectedMarker.latitude
+      updateData.longitude = selectedMarker.longitude
+      if (currentScale < SELECTED_MARKER_MIN_SCALE) {
+        updateData.scale = SELECTED_MARKER_MIN_SCALE
+        this.currentMapScale = SELECTED_MARKER_MIN_SCALE
+      }
+    }
+
+    this.setData(updateData, () => {
+      if (initialSelectedMarkerId) {
+        this.refreshMapSelectionState()
+      }
     })
   },
 
