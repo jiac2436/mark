@@ -934,6 +934,7 @@ page {
   display: flex;
   align-items: center;
   gap: 12rpx;
+  min-height: 70rpx;
 }
 
 .small-action-icon {

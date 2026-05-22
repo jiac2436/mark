@@ -16,6 +16,7 @@ const CREATED_MARKER_REFRESH_DELAY_MS = 500
 const CLUSTER_PANEL_SWIPE_THRESHOLD_PX = 24
 const NEW_MARKER_HIGHLIGHT_MS = 4000
 const HIGHLIGHT_MARKER_ID = 900002
+const SELECTED_MARKER_ID = 900003
 const MARKER_DOT_ICON = '/assets/marker-dot.png'
 const CATEGORY_MARKER_SIZE = 44
 const SELECTED_CATEGORY_MARKER_SIZE = 58
@@ -658,6 +659,11 @@ Page({
       return
     }
 
+    if (markerId === SELECTED_MARKER_ID && this.data.selectedMarkerId) {
+      this.showMarkerGroupByBusinessIds([this.data.selectedMarkerId])
+      return
+    }
+
     if (businessMarker) {
       this.showMarkerGroup([businessMarker])
     }
@@ -1191,6 +1197,8 @@ Page({
     const iconStats = {}
     const selectedMarkerId = this.data.selectedMarkerId
 
+    let fakeSelectedMarker = null
+
     const mapMarkers = displayMarkers.map(marker => {
       const mapMarkerId = this.getStableMapMarkerId(marker.id)
       const categoryMeta = getCategoryMeta(marker.category)
@@ -1203,20 +1211,37 @@ Page({
         count: (iconStats[marker.category || 'unknown'] ? iconStats[marker.category || 'unknown'].count : 0) + 1
       }
 
+      if (isSelected) {
+        fakeSelectedMarker = {
+          id: SELECTED_MARKER_ID,
+          latitude: marker.latitude,
+          longitude: marker.longitude,
+          iconPath,
+          width: SELECTED_CATEGORY_MARKER_SIZE,
+          height: SELECTED_CATEGORY_MARKER_SIZE,
+          joinCluster: false,
+          zIndex: 80
+        }
+      }
+
       const mapMarker = {
         id: mapMarkerId,
         latitude: marker.latitude,
         longitude: marker.longitude,
         iconPath,
-        width: isSelected ? SELECTED_CATEGORY_MARKER_SIZE : CATEGORY_MARKER_SIZE,
-        height: isSelected ? SELECTED_CATEGORY_MARKER_SIZE : CATEGORY_MARKER_SIZE,
-        joinCluster: !isSelected,
-        zIndex: isSelected ? 80 : 1,
-        alpha: (this.data.isDropAnimating && marker.id === this.data.animatingMarkerId) ? 0 : 1
+        width: CATEGORY_MARKER_SIZE,
+        height: CATEGORY_MARKER_SIZE,
+        joinCluster: true,
+        zIndex: 1,
+        alpha: (this.data.isDropAnimating && marker.id === this.data.animatingMarkerId) || isSelected ? 0 : 1
       }
 
       return mapMarker
     })
+
+    if (fakeSelectedMarker) {
+      mapMarkers.push(fakeSelectedMarker)
+    }
 
     this.mapMarkerIdToBusinessId = mapMarkerIdToBusinessId
     this.businessMarkerById = businessMarkerById
