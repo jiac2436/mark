@@ -476,6 +476,12 @@ Page({
     this.requestCurrentLocation(true)
   },
 
+  onGuideTap() {
+    wx.navigateTo({
+      url: '/pages/guide/index'
+    })
+  },
+
   moveToCurrentLocation() {
     if (!this.mapCtx || !this.mapCtx.moveToLocation) {
       return

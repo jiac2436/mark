@@ -483,6 +483,37 @@ page {
   box-shadow: 0 2rpx 0 0 var(--shadow-btn) !important;
 }
 
+.map-guide-button {
+  position: absolute;
+  top: 324rpx;
+  left: 28rpx;
+  right: auto !important;
+  bottom: auto !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: var(--bg-color);
+  border: 4rpx solid var(--border-color);
+  box-shadow: 0 8rpx 0 0 var(--shadow-btn);
+  box-sizing: border-box;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.map-guide-button:active, .map-guide-button.btn-active {
+  transform: translateY(6rpx) !important;
+  box-shadow: 0 2rpx 0 0 var(--shadow-btn) !important;
+}
+
+.guide-icon-text {
+  color: var(--text-color);
+  font-size: 44rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .panel {
   position: absolute;
   left: 0;

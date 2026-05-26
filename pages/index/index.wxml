@@ -60,6 +60,9 @@
           </cover-view>
         </cover-view>
       </cover-view>
+      <cover-view class="map-guide-button" hover-class="btn-active" catchtap="onGuideTap">
+        <cover-view class="guide-icon-text">?</cover-view>
+      </cover-view>
 
       <view class="drop-marker-mask" wx:if="{{isDropAnimating}}" catchtouchmove="noop">
         <view class="drop-marker-container">
