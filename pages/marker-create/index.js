@@ -144,10 +144,6 @@ Page({
   onCategoryTap(e) {
     const category = e.currentTarget.dataset.category
     const iconPath = getCategoryIconPath(category)
-    console.log('[MapMark] preview marker icon', {
-      category,
-      iconPath
-    })
     this.setData({
       categories: buildCategories(category),
       'form.category': category,

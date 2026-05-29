@@ -1755,9 +1755,7 @@ Page({
     return Number(markerId)
   },
 
-  debugMapLog(label, payload) {
-    console.log(`[MapMark] ${label}`, payload || '')
-  },
+  debugMapLog() {},
 
   showApiError(error, fallbackTitle) {
     const message = error && error.message ? error.message : fallbackTitle
