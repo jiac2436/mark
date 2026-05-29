@@ -72,6 +72,15 @@ page {
   line-height: 40rpx;
 }
 
+.feedback-card {
+  position: relative;
+  padding-right: 72rpx;
+}
+
+.feedback-card-active {
+  opacity: 0.75;
+}
+
 /* ---- 分类图标网格 ---- */
 .icon-grid {
   display: flex;
@@ -275,6 +284,17 @@ page {
   color: var(--text-color-body);
   font-size: 24rpx;
   line-height: 36rpx;
+}
+
+.feedback-arrow {
+  position: absolute;
+  right: 28rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-color-secondary);
+  font-size: 44rpx;
+  line-height: 44rpx;
+  font-weight: 700;
 }
 
 /* ---- 底部 ---- */

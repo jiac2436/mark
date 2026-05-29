@@ -6,6 +6,16 @@
     <text class="hero-tagline">在地图上随手记录，分享给每一个路过的人</text>
   </view>
 
+  <!-- 意见反馈 -->
+  <view class="card feedback-card" hover-class="feedback-card-active" bindtap="onFeedbackTap">
+    <view class="card-header">
+      <text class="card-icon">💬</text>
+      <text class="card-title">意见反馈</text>
+    </view>
+    <text class="card-text">遇到问题或有建议，可以匿名告诉我们。</text>
+    <text class="feedback-arrow">›</text>
+  </view>
+
   <!-- 这是什么 -->
   <view class="card">
     <view class="card-header">

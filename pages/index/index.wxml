@@ -51,6 +51,20 @@
           <cover-view class="create-icon-plus">+</cover-view>
         </cover-view>
       </cover-view>
+      <cover-view class="create-action-menu {{isCreateMenuExpanded ? 'is-expanded' : ''}}">
+        <cover-view class="create-action-button" hover-class="btn-active" catchtap="onCreateMapMarkerOptionTap">
+          <cover-view class="create-search-icon">
+            <cover-view class="create-search-lens"></cover-view>
+            <cover-view class="create-search-handle"></cover-view>
+          </cover-view>
+        </cover-view>
+        <cover-view class="create-action-button" hover-class="btn-active" catchtap="onCreatePhotoMarkerOptionTap">
+          <cover-view class="create-camera-icon">
+            <cover-view class="create-camera-top"></cover-view>
+            <cover-view class="create-camera-lens"></cover-view>
+          </cover-view>
+        </cover-view>
+      </cover-view>
       <cover-view class="{{mapLocateButtonClass}}" hover-class="btn-active" bindtap="onLocateTap">
         <cover-view class="map-locate-radar">
           <cover-view class="radar-outer-ring">

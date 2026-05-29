@@ -252,6 +252,14 @@ function reportMarker(id, reason) {
   })
 }
 
+function submitFeedback(content) {
+  return request({
+    path: '/api/feedback',
+    method: 'POST',
+    data: { content }
+  })
+}
+
 module.exports = {
   login,
   fetchMarkers,
@@ -260,5 +268,6 @@ module.exports = {
   validateMarkerLocation,
   deleteMarker,
   voteMarker,
-  reportMarker
+  reportMarker,
+  submitFeedback
 }

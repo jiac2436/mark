@@ -19,6 +19,7 @@ const NEW_MARKER_HIGHLIGHT_MS = 4000
 const HIGHLIGHT_MARKER_ID = 900002
 const SELECTED_MARKER_ID = 900003
 const MARKER_DOT_ICON = '/assets/marker-dot.png'
+const PHOTO_MARKER_DRAFT_KEY = 'map_mark_photo_marker_draft'
 const CATEGORY_MARKER_SIZE = 44
 const SELECTED_CATEGORY_MARKER_SIZE = 58
 
@@ -159,6 +160,7 @@ Page({
     activeCategory: 'all',
     mapFilterCategories: buildMapFilterCategories('all'),
     isMapFilterExpanded: false,
+    isCreateMenuExpanded: false,
     mapMarkers: [],
     markers: [],
     visibleMarkerCount: 0,
@@ -579,10 +581,99 @@ Page({
   },
 
   onStartSelectLocationTap() {
-    this.onCreateMarkerEntryTap()
+    this.startMapMarkerCreate()
   },
 
   onCreateMarkerEntryTap() {
+    this.setData({
+      isCreateMenuExpanded: !this.data.isCreateMenuExpanded
+    })
+  },
+
+  onCreateMapMarkerOptionTap() {
+    this.setData({ isCreateMenuExpanded: false })
+    this.startMapMarkerCreate()
+  },
+
+  onCreatePhotoMarkerOptionTap() {
+    this.setData({ isCreateMenuExpanded: false })
+
+    wx.chooseMedia({
+      count: 1,
+      mediaType: ['image'],
+      sourceType: ['camera'],
+      sizeType: ['compressed'],
+      camera: 'back',
+      success: res => {
+        const file = res.tempFiles && res.tempFiles[0]
+        const imagePath = file && (file.tempFilePath || file.path)
+        if (!imagePath) {
+          wx.showToast({
+            title: '拍照失败',
+            icon: 'none'
+          })
+          return
+        }
+
+        this.startPhotoMarkerCreate(imagePath)
+      },
+      fail: error => {
+        const message = error && error.errMsg ? error.errMsg : ''
+        if (message.indexOf('cancel') > -1) {
+          return
+        }
+
+        wx.showToast({
+          title: '拍照失败',
+          icon: 'none'
+        })
+      }
+    })
+  },
+
+  startPhotoMarkerCreate(imagePath) {
+    wx.getLocation({
+      type: 'gcj02',
+      success: location => {
+        this.setData({
+          hasLocationAuth: true,
+          locationLabel: '已定位到当前位置',
+          showPermissionStrip: false
+        })
+
+        try {
+          wx.setStorageSync(PHOTO_MARKER_DRAFT_KEY, {
+            imagePath,
+            latitude: Number(location.latitude),
+            longitude: Number(location.longitude),
+            createdAt: Date.now()
+          })
+        } catch (e) {
+          wx.showToast({
+            title: '创建草稿失败',
+            icon: 'none'
+          })
+          return
+        }
+
+        wx.navigateTo({
+          url: '/pages/marker-create/index?draft=photo'
+        })
+      },
+      fail: () => {
+        this.setData({
+          hasLocationAuth: false,
+          showPermissionStrip: true
+        })
+        wx.showToast({
+          title: '需要开启定位',
+          icon: 'none'
+        })
+      }
+    })
+  },
+
+  startMapMarkerCreate() {
     wx.getLocation({
       type: 'gcj02',
       success: location => {
@@ -683,6 +774,12 @@ Page({
   },
 
   onMapTap(e) {
+    if (this.data.isCreateMenuExpanded) {
+      this.setData({ isCreateMenuExpanded: false })
+      this.clearMapTapTimer()
+      return
+    }
+
     if (this.data.longPressedMarkerId) {
       this.setData({ longPressedMarkerId: '' })
     }

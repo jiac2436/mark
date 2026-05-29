@@ -2,7 +2,8 @@
   "pages": [
     "pages/index/index",
     "pages/marker-create/index",
-    "pages/guide/index"
+    "pages/guide/index",
+    "pages/feedback/index"
   ],
   "window": {
     "navigationBarTextStyle": "black",

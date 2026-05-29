@@ -5,6 +5,7 @@ const MAX_IMAGE_COUNT = 5
 const MAX_IMAGE_BYTES = 300 * 1024
 const IMAGE_MAX_SIZE = 960
 const IMAGE_QUALITY = 50
+const PHOTO_MARKER_DRAFT_KEY = 'map_mark_photo_marker_draft'
 
 const CATEGORIES = [
   { value: 'fishing', label: '钓点', iconPath: '/assets/fishing.png' },
@@ -35,6 +36,14 @@ function getCategoryIconPath(category) {
 function parseCoordinate(value) {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) ? numberValue : 0
+}
+
+function hasValidCoordinate(point) {
+  return point &&
+    typeof point.latitude === 'number' &&
+    typeof point.longitude === 'number' &&
+    Number.isFinite(point.latitude) &&
+    Number.isFinite(point.longitude)
 }
 
 function getFileSize(filePath) {
@@ -71,10 +80,20 @@ Page({
   },
 
   onLoad(options) {
-    const latitude = parseCoordinate(options.latitude)
-    const longitude = parseCoordinate(options.longitude)
-    const name = decodeURIComponent(options.name || '') || '已选位置'
-    const address = decodeURIComponent(options.address || '')
+    const photoDraft = this.consumePhotoDraft(options)
+    if (options && options.draft === 'photo' && !photoDraft) {
+      wx.showToast({
+        title: '拍照草稿无效',
+        icon: 'none'
+      })
+      setTimeout(() => wx.navigateBack(), 800)
+      return
+    }
+
+    const latitude = photoDraft ? photoDraft.latitude : parseCoordinate(options.latitude)
+    const longitude = photoDraft ? photoDraft.longitude : parseCoordinate(options.longitude)
+    const name = photoDraft ? '当前位置' : (decodeURIComponent(options.name || '') || '已选位置')
+    const address = photoDraft ? '' : decodeURIComponent(options.address || '')
 
     this.setData({
       point: {
@@ -92,6 +111,34 @@ Page({
         height: 32
       }]
     })
+
+    if (photoDraft && photoDraft.imagePath) {
+      this.prepareSelectedImages([{
+        tempFilePath: photoDraft.imagePath
+      }])
+    }
+  },
+
+  consumePhotoDraft(options) {
+    if (!options || options.draft !== 'photo') {
+      return null
+    }
+
+    try {
+      const draft = wx.getStorageSync(PHOTO_MARKER_DRAFT_KEY)
+      wx.removeStorageSync(PHOTO_MARKER_DRAFT_KEY)
+      if (!draft || !draft.imagePath || !hasValidCoordinate(draft)) {
+        return null
+      }
+
+      return {
+        imagePath: draft.imagePath,
+        latitude: Number(draft.latitude),
+        longitude: Number(draft.longitude)
+      }
+    } catch (e) {
+      return null
+    }
   },
 
   onCategoryTap(e) {

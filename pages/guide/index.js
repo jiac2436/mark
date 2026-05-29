@@ -13,5 +13,11 @@ Page({
 
   onBackTap() {
     wx.navigateBack()
+  },
+
+  onFeedbackTap() {
+    wx.navigateTo({
+      url: '/pages/feedback/index'
+    })
   }
 })

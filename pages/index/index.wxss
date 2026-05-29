@@ -466,7 +466,7 @@ page {
 /* 纤细精致加号 - 放大一倍并绝对居中，使其探出光晕外 */
 .create-icon-plus {
   position: absolute;
-  top: 50%;
+  top: 37%;
   left: 50%;
   transform: translate(-50%, -50%);
   font-size: 72rpx;
@@ -483,11 +483,115 @@ page {
   box-shadow: 0 2rpx 0 0 var(--shadow-btn) !important;
 }
 
+.create-action-menu {
+  position: absolute;
+  top: 132rpx;
+  left: 122rpx;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-16rpx);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.create-action-menu.is-expanded {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.create-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  color: var(--text-color);
+  background: var(--bg-color);
+  border: 4rpx solid var(--border-color);
+  box-shadow: 0 8rpx 0 0 var(--shadow-btn);
+  box-sizing: border-box;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.create-action-button:active,
+.create-action-button.btn-active {
+  transform: translateY(6rpx) !important;
+  box-shadow: 0 2rpx 0 0 var(--shadow-btn) !important;
+}
+
+.create-search-icon {
+  position: relative;
+  width: 48rpx;
+  height: 48rpx;
+}
+
+.create-search-lens {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: 50%;
+  border: 7rpx solid var(--text-color);
+  background: rgba(25, 200, 185, 0.14);
+  box-sizing: border-box;
+}
+
+.create-search-handle {
+  position: absolute;
+  right: 4rpx;
+  bottom: 6rpx;
+  width: 22rpx;
+  height: 8rpx;
+  border-radius: 8rpx;
+  background: var(--text-color);
+  transform: rotate(45deg);
+  transform-origin: center;
+}
+
+.create-camera-icon {
+  position: relative;
+  width: 42rpx;
+  height: 32rpx;
+  margin-top: 6rpx;
+  border-radius: 10rpx;
+  background: #4b5563;
+  border: 4rpx solid var(--text-color);
+  box-sizing: border-box;
+}
+
+.create-camera-top {
+  position: absolute;
+  top: -12rpx;
+  left: 8rpx;
+  width: 18rpx;
+  height: 10rpx;
+  border-radius: 8rpx 8rpx 0 0;
+  background: var(--text-color);
+}
+
+.create-camera-lens {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 4rpx solid #19c8b9;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+}
+
 .map-guide-button {
   position: absolute;
-  top: 324rpx;
-  left: 28rpx;
-  right: auto !important;
+  top: 36rpx;
+  right: 28rpx !important;
+  left: auto !important;
   bottom: auto !important;
   display: flex;
   align-items: center;
