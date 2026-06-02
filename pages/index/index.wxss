@@ -930,82 +930,116 @@ page {
 
 .card-score-badge {
   display: flex;
-  align-items: baseline;
-  gap: 6rpx;
+  align-items: center;
+  gap: 10rpx;
+  flex-shrink: 0;
+  min-height: 58rpx;
+  padding: 5rpx 10rpx 9rpx 18rpx;
+  border-radius: 30rpx;
   color: var(--text-color);
+  background: var(--bg-color);
+  border: 4rpx solid var(--border-color);
+  box-shadow: 0 7rpx 0 0 var(--shadow-btn), 0 6rpx 14rpx rgba(114, 93, 66, 0.12);
+  box-sizing: border-box;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+}
+
+.score-badge-active {
+  transform: translateY(5rpx);
+  background: var(--primary-color-bg);
+  box-shadow: 0 2rpx 0 0 var(--shadow-btn), 0 2rpx 8rpx rgba(114, 93, 66, 0.1);
 }
 
 .score-label {
-  font-size: 22rpx;
-  font-weight: 700;
+  font-size: 23rpx;
+  line-height: 1;
+  font-weight: 800;
 }
 
 .score-num {
-  font-size: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36rpx;
+  height: 36rpx;
+  padding: 0 8rpx;
+  border-radius: 18rpx;
+  color: #ffffff;
+  background: var(--primary-color);
+  font-size: 25rpx;
+  line-height: 36rpx;
   font-weight: 800;
   font-family: Nunito, -apple-system, BlinkMacSystemFont, sans-serif;
-  letter-spacing: -0.5rpx;
+  box-sizing: border-box;
 }
 
 .tag {
   display: inline-flex;
   align-items: center;
-  height: 44rpx;
-  padding: 0 18rpx;
-  border-radius: 20rpx;
+  height: 40rpx;
+  padding: 0 16rpx;
+  border-radius: 16rpx;
   font-size: 22rpx;
   font-weight: 700;
-  border: 2rpx solid var(--border-color);
+  border: 2rpx solid rgba(159, 146, 125, 0.45);
+  box-shadow: none;
 }
 
 .category-fishing {
   color: #1a6f8a;
   background: #d4f0f7;
+  border-color: rgba(26, 111, 138, 0.22);
 }
 
 .category-discovery {
   color: #3b7a57;
   background: #d2edd9;
+  border-color: rgba(59, 122, 87, 0.22);
 }
 
 .category-notice {
   color: #a05a2c;
   background: #fae4c3;
+  border-color: rgba(160, 90, 44, 0.22);
 }
 
 .category-urgent {
   color: #bd3a3a;
   background: #fcd5d5;
+  border-color: rgba(189, 58, 58, 0.22);
 }
 
 .category-lost_found {
   color: #63439e;
   background: #e9e3f7;
+  border-color: rgba(99, 67, 158, 0.22);
 }
 
 .category-help {
   color: #cc6015;
   background: #ffe3d1;
+  border-color: rgba(204, 96, 21, 0.22);
 }
 
 .category-kindness {
   color: #bd3a72;
   background: #fcd5e5;
+  border-color: rgba(189, 58, 114, 0.22);
 }
 
 .mine-badge {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44rpx;
-  height: 44rpx;
+  width: 40rpx;
+  height: 40rpx;
   border-radius: 50%;
   color: #ffffff;
   background: var(--text-color);
-  border: 2rpx solid var(--border-color);
+  border: 2rpx solid rgba(121, 79, 39, 0.28);
   font-size: 22rpx;
   font-weight: 800;
-  box-shadow: 0 2rpx 8rpx rgba(121, 79, 39, 0.2);
+  box-shadow: none;
 }
 
 .card-title {

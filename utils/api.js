@@ -64,10 +64,9 @@ function wxLogin() {
 
 function rawRequest(options) {
   return new Promise((resolve, reject) => {
-    wx.request({
+    const requestOptions = {
       url: `${API_BASE_URL}${options.path}`,
       method: options.method || 'GET',
-      data: options.data || undefined,
       header: options.header || {},
       success: res => {
         const data = res.data || {}
@@ -81,7 +80,13 @@ function rawRequest(options) {
       fail: () => {
         reject(new Error('网络请求失败'))
       }
-    })
+    }
+
+    if (Object.prototype.hasOwnProperty.call(options, 'data')) {
+      requestOptions.data = options.data
+    }
+
+    wx.request(requestOptions)
   })
 }
 
@@ -230,7 +235,8 @@ function validateMarkerLocation(data) {
 function deleteMarker(id) {
   return request({
     path: `/api/markers/${encodeURIComponent(id)}`,
-    method: 'DELETE'
+    method: 'DELETE',
+    data: {}
   })
 }
 

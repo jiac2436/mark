@@ -923,6 +923,22 @@ Page({
     })
   },
 
+  onScoreBadgeTap(e) {
+    const markerId = e.currentTarget.dataset.id
+    if (!markerId) {
+      return
+    }
+
+    this.setData({
+      selectedMarkerId: markerId,
+      selectedMarker: this.data.selectedClusterMarkers.find(item => item.id === markerId) || this.data.selectedMarker,
+      selectedClusterMarkers: this.withSelectedListItemClass(this.data.selectedClusterMarkers, markerId),
+      longPressedMarkerId: markerId
+    }, () => {
+      this.refreshMapSelectionState()
+    })
+  },
+
   onMarkerListScroll(e) {
     if (this.data.longPressedMarkerId) {
       this.setData({ longPressedMarkerId: '' })

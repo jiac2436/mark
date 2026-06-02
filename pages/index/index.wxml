@@ -115,7 +115,7 @@
                       <text class="{{item.categoryClass}}">{{item.categoryLabel}}</text>
                       <text wx:if="{{item.isMine}}" class="mine-badge">我</text>
                     </view>
-                    <view class="card-score-badge">
+                    <view class="card-score-badge" hover-class="score-badge-active" data-id="{{item.id}}" catchtap="onScoreBadgeTap">
                       <text class="score-label">有用</text>
                       <text class="score-num">{{item.displayScore}}</text>
                     </view>
